@@ -83,8 +83,8 @@ with col2:
 st.markdown("---")
 
 # Login credentials
-LOGIN_USERNAME = "admin"
-LOGIN_PASSWORD = "koenig2024"
+LOGIN_USERNAME = "Monika.Chopra"
+LOGIN_PASSWORD = "manyamey"
 
 # Initialize session state
 if 'authenticated' not in st.session_state:

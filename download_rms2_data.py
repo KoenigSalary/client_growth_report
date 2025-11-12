@@ -119,7 +119,7 @@ class RMS2DataDownloader:
             self.page.fill("input[placeholder='Password']", self.password)
             
             # Click login button
-            self.page.click("button[type='submit']")
+            self.page.click("button.ui.positive.button:has-text('Login')"
             
             # Wait for navigation
             self.page.wait_for_load_state('networkidle')

@@ -1,34 +1,53 @@
 """
-Download RCB data files from RMS2 using Selenium
-Based on the working client_growth_report_FINAL.py script
+Download RCB data files from RMS2 using Playwright (Cloud-friendly)
+Works on Streamlit Cloud and local environments
 """
 
 import os
 import time
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from dotenv import load_dotenv
 from datetime import datetime
 
-# Load environment variables
+# Try to import streamlit for secrets (cloud deployment)
+try:
+    import streamlit as st
+    HAS_STREAMLIT = True
+except ImportError:
+    HAS_STREAMLIT = False
+
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
 load_dotenv()
 
+
 class RMS2DataDownloader:
-    """Download RCB data files from RMS2 system"""
+    """Download RCB data files from RMS2 system using Playwright"""
     
     def __init__(self, data_dir='data', progress_callback=None):
-        """Initialize downloader with credentials from .env"""
-        self.username = os.getenv('RMS_USERNAME')
-        self.password = os.getenv('RMS_PASSWORD')
-        self.login_url = os.getenv('RMS_LOGIN_URL', 'https://rms2.koenig-solutions.com')
-        self.rcb_url = os.getenv('RCB_BASE_URL', 'https://rms2.koenig-solutions.com/RCB')
+        """Initialize downloader with credentials from .env or Streamlit secrets"""
+        # Try Streamlit secrets first (for cloud deployment), then .env file (for local)
+        if HAS_STREAMLIT and hasattr(st, 'secrets'):
+            try:
+                self.username = st.secrets.get('RMS_USERNAME', os.getenv('RMS_USERNAME'))
+                self.password = st.secrets.get('RMS_PASSWORD', os.getenv('RMS_PASSWORD'))
+                self.login_url = st.secrets.get('RMS_LOGIN_URL', os.getenv('RMS_LOGIN_URL', 'https://rms2.koenig-solutions.com'))
+                self.rcb_url = st.secrets.get('RCB_BASE_URL', os.getenv('RCB_BASE_URL', 'https://rms2.koenig-solutions.com/RCB'))
+            except Exception:
+                # Fallback to environment variables
+                self.username = os.getenv('RMS_USERNAME')
+                self.password = os.getenv('RMS_PASSWORD')
+                self.login_url = os.getenv('RMS_LOGIN_URL', 'https://rms2.koenig-solutions.com')
+                self.rcb_url = os.getenv('RCB_BASE_URL', 'https://rms2.koenig-solutions.com/RCB')
+        else:
+            # Use environment variables from .env file
+            self.username = os.getenv('RMS_USERNAME')
+            self.password = os.getenv('RMS_PASSWORD')
+            self.login_url = os.getenv('RMS_LOGIN_URL', 'https://rms2.koenig-solutions.com')
+            self.rcb_url = os.getenv('RCB_BASE_URL', 'https://rms2.koenig-solutions.com/RCB')
         
         if not self.username or not self.password:
-            raise ValueError("RMS_USERNAME and RMS_PASSWORD must be set in .env file")
+            raise ValueError("RMS_USERNAME and RMS_PASSWORD must be set in Streamlit secrets or .env file")
         
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
@@ -36,7 +55,8 @@ class RMS2DataDownloader:
         self.download_temp = self.data_dir / 'temp_downloads'
         self.download_temp.mkdir(exist_ok=True)
         
-        self.driver = None
+        self.browser = None
+        self.page = None
         self.progress_callback = progress_callback
         
     def update_progress(self, message, percentage):
@@ -45,244 +65,149 @@ class RMS2DataDownloader:
             self.progress_callback(message, percentage)
         print(f"[{percentage}%] {message}")
     
-    def setup_driver(self):
-        """Configure Chrome WebDriver with download preferences"""
+    def setup_browser(self):
+        """Configure Playwright browser"""
         self.update_progress("Setting up browser...", 5)
         
-        chrome_options = Options()
-        
-        # Download preferences
-        prefs = {
-            "download.default_directory": str(self.download_temp.absolute()),
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-        chrome_options.add_experimental_option("prefs", prefs)
-        
-        # Headless mode for server deployment
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        
         try:
-            self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.maximize_window()
+            from playwright.sync_api import sync_playwright
+            
+            self.playwright = sync_playwright().start()
+            
+            # Use chromium (works on Streamlit Cloud with playwright install)
+            self.browser = self.playwright.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-dev-shm-usage']
+            )
+            
+            # Create context with download path
+            self.context = self.browser.new_context(
+                accept_downloads=True
+            )
+            
+            self.page = self.context.new_page()
             self.update_progress("Browser ready", 10)
+            
         except Exception as e:
-            raise Exception(f"Failed to initialize Chrome WebDriver: {str(e)}. Make sure Chrome and ChromeDriver are installed.")
+            raise Exception(f"Failed to initialize Playwright: {str(e)}. Run: playwright install chromium")
     
     def login(self):
         """Login to RMS2 system"""
         self.update_progress("Logging in to RMS2...", 15)
         
         try:
-            self.driver.get(self.login_url)
-            wait = WebDriverWait(self.driver, 30)
+            self.page.goto(self.login_url, wait_until='networkidle')
             
-            time.sleep(3)
-            
-            # Enter email
-            email_field = wait.until(
-                EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Your Email']"))
-            )
-            email_field.clear()
-            email_field.send_keys(self.username)
+            # Wait for email field and enter email
+            self.page.fill("input[placeholder='Your Email']", self.username)
             
             # Enter password
-            password_field = wait.until(
-                EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Password']"))
-            )
-            password_field.clear()
-            password_field.send_keys(self.password)
+            self.page.fill("input[placeholder='Password']", self.password)
             
-            # Click login
-            login_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Login')]"))
-            )
-            login_button.click()
+            # Click login button
+            self.page.click("button[type='submit']")
             
-            time.sleep(5)
-            self.update_progress("Login successful", 25)
+            # Wait for navigation
+            self.page.wait_for_load_state('networkidle')
+            
+            self.update_progress("Login successful", 20)
             
         except Exception as e:
             raise Exception(f"Login failed: {str(e)}")
     
-    def navigate_to_rcb(self):
-        """Navigate to RCB page"""
-        self.update_progress("Opening RCB page...", 30)
-        self.driver.get(self.rcb_url)
-        time.sleep(5)
-    
-    def export_data(self, months):
-        """Export data for specified number of months
-        
-        Args:
-            months: Number of months (12 or 24)
-            
-        Returns:
-            Path to downloaded file, or None if failed
-        """
-        self.update_progress(f"Exporting {months}-month data...", 35 if months == 24 else 55)
-        
-        wait = WebDriverWait(self.driver, 30)
+    def download_file(self, period_months, target_filename):
+        """Download RCB file for specified period"""
+        self.update_progress(f"Downloading {period_months}-month data...", 30 if period_months == 24 else 60)
         
         try:
-            # Find and clear month input field
-            try:
-                month_input = wait.until(
-                    EC.presence_of_element_located((By.XPATH, "//input[@placeholder='12']"))
-                )
-            except:
-                month_input = wait.until(
-                    EC.presence_of_element_located((By.XPATH, "//input[@type='text' and contains(@class, 'MuiInputBase-input')]"))
-                )
+            # Go to RCB page
+            self.page.goto(self.rcb_url, wait_until='networkidle')
+            time.sleep(2)
             
-            month_input.clear()
-            time.sleep(0.5)
-            month_input.send_keys(str(months))
+            # Select the period from dropdown
+            self.page.select_option("select[name='period']", str(period_months))
             time.sleep(1)
             
-            # Click Display button
-            display_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ui mini button') and contains(., 'Display')]"))
-            )
-            display_button.click()
-            time.sleep(10)
+            # Wait for download to trigger
+            with self.page.expect_download() as download_info:
+                # Click download button
+                self.page.click("button:has-text('Download')")
             
-            # Click Export to Excel button
-            export_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ui mini button') and contains(., 'Export to excel')]"))
-            )
+            download = download_info.value
             
-            # Track files before download
-            files_before = set(os.listdir(self.download_temp))
+            # Save to target location
+            target_path = self.data_dir / target_filename
+            download.save_as(target_path)
             
-            export_button.click()
-            self.update_progress(f"Downloading {months}-month file...", 40 if months == 24 else 60)
+            self.update_progress(f"{period_months}-month data downloaded", 50 if period_months == 24 else 80)
             
-            # Wait for download to complete
-            downloaded_file = None
-            for i in range(60):
-                time.sleep(1)
-                files_after = set(os.listdir(self.download_temp))
-                new_files = files_after - files_before
-                
-                if new_files:
-                    for new_file in new_files:
-                        if not new_file.endswith(('.crdownload', '.tmp')):
-                            file_path = self.download_temp / new_file
-                            if file_path.exists():
-                                time.sleep(2)  # Wait for file to finish writing
-                                
-                                # Rename to standard name
-                                target_name = f"RCB_{months}months.xlsx"
-                                target_path = self.data_dir / target_name
-                                
-                                # Remove old file if exists
-                                if target_path.exists():
-                                    target_path.unlink()
-                                
-                                # Move to data directory
-                                file_path.rename(target_path)
-                                downloaded_file = target_path
-                                break
-                
-                if downloaded_file:
-                    break
-                    
-                if i % 10 == 0 and i > 0:
-                    self.update_progress(f"Still waiting for {months}-month download... ({i}/60s)", 
-                                       42 + i//10 if months == 24 else 62 + i//10)
+            return True
             
-            if downloaded_file:
-                file_size = downloaded_file.stat().st_size / (1024 * 1024)
-                self.update_progress(f"{months}-month file downloaded ({file_size:.1f}MB)", 
-                                   50 if months == 24 else 70)
-                return downloaded_file
-            else:
-                raise Exception(f"Download timeout for {months}-month file")
-                
         except Exception as e:
-            raise Exception(f"Failed to export {months}-month data: {str(e)}")
+            raise Exception(f"Download failed for {period_months}-month data: {str(e)}")
     
-    def download_all(self):
-        """Main method to download both files
+    def cleanup(self):
+        """Close browser and cleanup"""
+        self.update_progress("Cleaning up...", 90)
         
-        Returns:
-            tuple: (success: bool, message: str, files: dict)
-        """
         try:
-            self.setup_driver()
+            if self.page:
+                self.page.close()
+            if self.context:
+                self.context.close()
+            if self.browser:
+                self.browser.close()
+            if hasattr(self, 'playwright'):
+                self.playwright.stop()
+        except Exception as e:
+            print(f"Cleanup warning: {e}")
+    
+    def download_both_files(self):
+        """Download both 24-month and 12-month files"""
+        try:
+            self.setup_browser()
             self.login()
-            self.navigate_to_rcb()
             
             # Download 24-month file
-            file_24 = self.export_data(24)
-            if not file_24:
-                raise Exception("Failed to download 24-month file")
-            
-            time.sleep(3)
+            self.download_file(24, 'RCB_24months.xlsx')
             
             # Download 12-month file
-            file_12 = self.export_data(12)
-            if not file_12:
-                raise Exception("Failed to download 12-month file")
+            self.download_file(12, 'RCB_12months.xlsx')
             
-            self.update_progress("All files downloaded successfully!", 80)
+            self.update_progress("Download complete!", 100)
             
-            files = {
-                '24_months': str(file_24),
-                '12_months': str(file_12)
-            }
-            
-            return True, "Successfully downloaded both RCB files", files
+            return True, "Both files downloaded successfully"
             
         except Exception as e:
-            return False, f"Download failed: {str(e)}", {}
-            
+            return False, f"Download failed: {str(e)}"
         finally:
-            if self.driver:
-                self.update_progress("Closing browser...", 90)
-                self.driver.quit()
-                self.update_progress("Download complete", 100)
-            
-            # Clean up temp directory
-            if self.download_temp.exists():
-                for file in self.download_temp.iterdir():
-                    try:
-                        file.unlink()
-                    except:
-                        pass
+            self.cleanup()
 
 
 def download_rcb_files(data_dir='data', progress_callback=None):
     """
-    Convenience function to download RCB files
+    Main function to download RCB files
     
     Args:
         data_dir: Directory to save files
-        progress_callback: Function to call with progress updates (message, percentage)
+        progress_callback: Optional callback for progress updates
     
     Returns:
         tuple: (success: bool, message: str)
     """
-    downloader = RMS2DataDownloader(data_dir, progress_callback)
-    success, message, files = downloader.download_all()
-    return success, message
+    try:
+        downloader = RMS2DataDownloader(data_dir, progress_callback)
+        return downloader.download_both_files()
+    except Exception as e:
+        return False, str(e)
 
 
-if __name__ == '__main__':
-    """Test the download function"""
-    print("Testing RMS2 data download with Selenium...")
-    print(f"Username: {os.getenv('RMS_USERNAME')}")
-    print(f"Login URL: {os.getenv('RMS_LOGIN_URL')}")
-    print("-" * 60)
-    
+if __name__ == "__main__":
+    # Test the downloader
+    print("Starting RMS2 data download...")
     success, message = download_rcb_files()
     
     if success:
-        print(f"\n✅ SUCCESS: {message}")
+        print(f"✅ {message}")
     else:
-        print(f"\n❌ FAILURE: {message}")
+        print(f"❌ {message}")

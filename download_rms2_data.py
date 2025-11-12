@@ -71,14 +71,28 @@ class RMS2DataDownloader:
         
         try:
             from playwright.sync_api import sync_playwright
+            import subprocess
             
             self.playwright = sync_playwright().start()
             
-            # Use chromium (works on Streamlit Cloud with playwright install)
-            self.browser = self.playwright.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-dev-shm-usage']
-            )
+            # Try to launch, if fails, install browser first
+            try:
+                self.browser = self.playwright.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
+            except Exception as launch_error:
+                # Browser not installed, install it now
+                self.update_progress("Installing browser (first time only)...", 7)
+                try:
+                    subprocess.run(['playwright', 'install', 'chromium'], check=True, capture_output=True)
+                    # Try launching again
+                    self.browser = self.playwright.chromium.launch(
+                        headless=True,
+                        args=['--no-sandbox', '--disable-dev-shm-usage']
+                    )
+                except Exception as install_error:
+                    raise Exception(f"Failed to install/launch browser: {str(install_error)}")
             
             # Create context with download path
             self.context = self.browser.new_context(
@@ -89,7 +103,7 @@ class RMS2DataDownloader:
             self.update_progress("Browser ready", 10)
             
         except Exception as e:
-            raise Exception(f"Failed to initialize Playwright: {str(e)}. Run: playwright install chromium")
+            raise Exception(f"Failed to initialize Playwright: {str(e)}. Try restarting the app.")
     
     def login(self):
         """Login to RMS2 system"""

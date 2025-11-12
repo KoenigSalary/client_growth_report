@@ -1,0 +1,264 @@
+================================================================================
+GITHUB ACTIONS SOLUTION - ALL FILES IN ONE DOCUMENT
+================================================================================
+
+This document contains all the files you need. Copy each section to create
+the corresponding file in your GitHub repository.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. download-rms2-data.yml - GitHub Actions workflow
+2. streamlit_app.py - Streamlit dashboard (excerpt - download full file)
+3. download_rms2_data.py - Download script (excerpt - download full file)
+4. requirements.txt - Dependencies
+5. Quick setup instructions
+
+================================================================================
+FILE 1: .github/workflows/download-rms2-data.yml
+================================================================================
+
+LOCATION: .github/workflows/download-rms2-data.yml
+
+CONTENT:
+
+name: Download RMS2 Data
+
+on:
+  # Run monthly on the 1st at 6 AM UTC
+  schedule:
+    - cron: '0 6 1 * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  download-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright python-dotenv
+      
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+      
+      - name: Create data directory
+        run: mkdir -p data
+      
+      - name: Download RMS2 data files
+        env:
+          RMS_USERNAME: ${{ secrets.RMS_USERNAME }}
+          RMS_PASSWORD: ${{ secrets.RMS_PASSWORD }}
+          RMS_LOGIN_URL: 'https://rms2.koenig-solutions.com'
+          RCB_BASE_URL: 'https://rms2.koenig-solutions.com/RCB'
+        run: |
+          python download_rms2_data.py
+      
+      - name: Verify downloaded files
+        run: |
+          echo "Checking downloaded files..."
+          ls -lh data/
+          
+          if [ ! -f "data/RCB_24months.xlsx" ]; then
+            echo "ERROR: RCB_24months.xlsx not found"
+            exit 1
+          fi
+          
+          if [ ! -f "data/RCB_12months.xlsx" ]; then
+            echo "ERROR: RCB_12months.xlsx not found"
+            exit 1
+          fi
+          
+          echo "Both files downloaded successfully!"
+      
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+      
+      - name: Commit and push data files
+        run: |
+          git add data/*.xlsx
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update RMS2 data files - $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git push
+          fi
+      
+      - name: Upload error screenshots (if any)
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: error-screenshots
+          path: data/*_error.png
+          if-no-files-found: ignore
+
+================================================================================
+FILE 2: requirements.txt
+================================================================================
+
+LOCATION: requirements.txt (root of repository)
+
+CONTENT:
+
+streamlit
+pandas
+openpyxl
+python-dotenv
+playwright
+requests
+
+================================================================================
+FILE 3: streamlit_app.py
+================================================================================
+
+LOCATION: streamlit_app.py (root of repository)
+
+NOTE: This is a LARGE file (15 KB). Download the full file separately.
+The full file is available as streamlit_app.py in the outputs folder.
+
+This file contains:
+- Login page with Koenig branding
+- Auto-downloaded data mode
+- Manual upload backup mode
+- Report generation
+- Clean UI with blue theme
+
+================================================================================
+FILE 4: download_rms2_data.py
+================================================================================
+
+LOCATION: download_rms2_data.py (root of repository)
+
+NOTE: This is a LARGE file (8 KB). Download the full file separately.
+The full file is available as download_rms2_data.py in the outputs folder.
+
+This file contains:
+- Two-step download process (Display → Export)
+- Playwright browser automation
+- Error handling and screenshots
+- Logging and progress tracking
+
+================================================================================
+QUICK SETUP INSTRUCTIONS
+================================================================================
+
+Step 1: Upload Files to GitHub
+-------------------------------
+Upload these files to your repository:
+✓ .github/workflows/download-rms2-data.yml (copy from above)
+✓ streamlit_app.py (download full file)
+✓ download_rms2_data.py (download full file)  
+✓ requirements.txt (copy from above)
+✓ process_report.py (already in your repo)
+✓ assets/koenig_logo.png (already in your repo)
+
+Step 2: Add GitHub Secrets
+---------------------------
+Settings → Secrets and variables → Actions → New repository secret
+
+Add these two secrets:
+- Name: RMS_USERNAME, Value: admin
+- Name: RMS_PASSWORD, Value: koenig2024
+
+Step 3: Enable Permissions
+---------------------------
+Settings → Actions → General → Workflow permissions
+
+✓ Select "Read and write permissions"
+✓ Check "Allow GitHub Actions to create and approve pull requests"
+✓ Click Save
+
+Step 4: Test the Workflow
+--------------------------
+Actions tab → Download RMS2 Data → Run workflow
+
+Wait ~2-3 minutes. Check data/ folder for downloaded files.
+
+Step 5: Deploy Streamlit
+-------------------------
+Deploy streamlit_app.py to Streamlit Cloud (no config changes needed!)
+
+================================================================================
+WORKFLOW EXPLANATION
+================================================================================
+
+What the workflow does:
+1. Runs monthly on 1st at 6 AM UTC (automatic)
+2. Can be triggered manually anytime (on-demand)
+3. Installs Playwright and Chromium browser
+4. Logs into RMS2 using your credentials from secrets
+5. Downloads 24-month data:
+   - Select 24 months period
+   - Click "Display" button
+   - Click "Export to excel" button
+6. Downloads 12-month data (same process)
+7. Saves files to data/ folder
+8. Commits files to repository
+9. Streamlit app reads files from data/ folder
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Issue: Workflow not appearing in Actions tab
+→ Check file is at: .github/workflows/download-rms2-data.yml
+→ Wait 1-2 minutes after upload
+
+Issue: Permission denied on git push
+→ Enable "Read and write permissions" in Settings → Actions
+
+Issue: Login failed
+→ Verify secrets are set correctly: RMS_USERNAME, RMS_PASSWORD
+
+Issue: Download timeout
+→ Check workflow logs for specific error
+→ Review error screenshots in artifacts
+
+Issue: Files not in data/ folder
+→ Check Actions tab for workflow status
+→ Review logs for commit step
+
+================================================================================
+COMPLETE DOCUMENTATION
+================================================================================
+
+For detailed information, see these files:
+- QUICK_START.md - Fast 5-minute setup
+- SETUP_CHECKLIST.md - Step-by-step checklist
+- GITHUB_ACTIONS_SETUP.md - Complete guide
+- DEPLOYMENT_SUMMARY.md - What changed and why
+- README.md - Full project documentation
+
+================================================================================
+SUPPORT
+================================================================================
+
+All files are available in the outputs folder:
+✓ download-rms2-data.yml - Workflow file
+✓ streamlit_app.py - Full Streamlit app
+✓ download_rms2_data.py - Full download script
+✓ requirements.txt - Dependencies
+✓ All documentation files
+
+Download each file individually if needed.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

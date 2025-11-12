@@ -1,186 +1,175 @@
-# 🚀 Quick Start Guide - RMS2 Streamlit Dashboard
+🚀 Quick Start Guide - GitHub Actions + Streamlit
+What Changed?
+Before: Streamlit app tried to download files using browser automation (complex, unreliable on cloud)
 
-Get up and running in **2 minutes**!
+Now: GitHub Actions downloads files automatically every month, Streamlit just generates reports (simple, reliable)
 
----
+✅ Benefits
+Reliable: GitHub Actions has full browser support (no more timeout errors)
+Automatic: Downloads run monthly on 1st at 6 AM UTC
+Simple: Streamlit only does what it's good at (UI + report generation)
+Flexible: Can trigger manual downloads anytime
+Transparent: Full logs of every download attempt
+📦 What You Need to Upload
+Upload these files to your GitHub repository:
 
-## ⚡ Installation (3 Steps)
+your-repo/
+├── .github/
+│   └── workflows/
+│       └── download-rms2-data.yml    ← NEW: Auto-download workflow
+├── assets/
+│   └── koenig_logo.png
+├── streamlit_app.py                  ← UPDATED: Uses auto-downloaded files
+├── process_report.py
+├── download_rms2_data.py             ← UPDATED: Two-step download process
+├── requirements.txt
+└── README.md
+⚡ 3-Step Setup
+Step 1: Upload Files to GitHub
+Drag and drop all files to your repository.
 
-### Step 1: Extract Files
-```bash
-unzip rms2_streamlit_package.zip
-cd rms2_streamlit_package
-```
+Step 2: Add Secrets
+Go to Settings → Secrets and variables → Actions
+Add these secrets:
+RMS_USERNAME = admin
+RMS_PASSWORD = koenig2024
+Step 3: Enable Workflow Permissions
+Go to Settings → Actions → General
+Under "Workflow permissions":
+✅ Select "Read and write permissions"
+✅ Check "Allow GitHub Actions to create and approve pull requests"
+Click Save
+Done! 🎉
 
-### Step 2: Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+🎮 How to Use
+Automatic Downloads (No Action Needed)
+Runs on 1st of every month at 6 AM UTC
+Downloads files automatically
+Commits to data/ folder
+No manual intervention required
+Manual Downloads (On-Demand)
+When you need fresh data immediately:
 
-### Step 3: Run Dashboard
-```bash
-streamlit run streamlit_app.py
-```
+Go to Actions tab
+Click Download RMS2 Data
+Click Run workflow button
+Wait ~2-3 minutes
+Files appear in data/ folder
+Generate Reports in Streamlit
+Open your Streamlit app
+Login with: admin / koenig2024
+App shows: "🤖 Use Auto-Downloaded Data" mode
+Click "Generate Client Growth Report"
+Download Excel file
+Manual upload still works as backup!
 
-**That's it!** Open http://localhost:8501 in your browser.
+📊 What the Workflow Does
+Copy
+🔍 Check if It's Working
+After First Run:
+Go to Actions tab → Should see green checkmark ✅
+Go to Code tab → Open data/ folder
+Should see:
+RCB_24months.xlsx
+RCB_12months.xlsx
+In Streamlit App:
+Mode selector shows: "🤖 Use Auto-Downloaded Data"
+Shows last update timestamp
+Shows file sizes
+🛠️ Troubleshooting
+"Workflow not found"
+→ Check file is at: .github/workflows/download-rms2-data.yml
 
----
+"Permission denied" on git push
+→ Enable write permissions in Settings → Actions → General
 
-## 📥 Using the Dashboard
+"Login failed"
+→ Check secrets: RMS_USERNAME and RMS_PASSWORD are set correctly
 
-### **Manual Upload Mode** (Recommended - Always Works)
+Files not appearing in data/ folder
+→ Check Actions tab for error logs
 
-1. **Download data from RMS2**:
-   - Go to: https://rms2.koenig-solutions.com/RCB
-   - Login with your credentials
-   - Export 24-month data → Save as `RCB_24months.xlsx`
-   - Export 12-month data → Save as `RCB_12months.xlsx`
+Need detailed help?
+→ See GITHUB_ACTIONS_SETUP.md for complete guide
 
-2. **Upload in dashboard**:
-   - Open http://localhost:8501
-   - Select "📥 Manual Upload" in sidebar
-   - Upload both Excel files
-   - Click "📊 Generate Client Growth Report"
+📅 Schedule
+Event	Time	Action
+Monthly	1st at 6 AM UTC	Auto-download files
+Anytime	Manual trigger	On-demand download
+After download	Automatic	Files committed to repo
+When you visit	Anytime	Generate reports
+🎯 Comparison
+Old Approach (Streamlit Cloud Auto-Download)
+❌ Complex browser automation in cloud
+❌ Timeout errors
+❌ ChromeDriver issues
+❌ Button selector problems
+❌ Hard to debug
+❌ Resource-intensive
 
-3. **Download report**:
-   - Wait 1-2 minutes
-   - Click "⬇️ Download Excel Report"
+New Approach (GitHub Actions + Streamlit)
+✅ Browser automation in GitHub Actions (reliable)
+✅ No timeout issues (robust Ubuntu runners)
+✅ Full Playwright support
+✅ Two-step download process implemented
+✅ Easy to debug (detailed logs)
+✅ Efficient resource usage
+✅ Scheduled automation
+✅ Manual trigger option
 
-**Done!** 🎉
+💡 Why This Is Better
+Separation of Concerns
 
----
+GitHub Actions: Downloads data (what it's built for)
+Streamlit: Generates reports (what it's good at)
+Reliability
 
-## 🤖 Auto-Download Mode (Optional - Advanced)
+GitHub Actions has full browser support
+No cloud deployment issues
+Detailed logs for debugging
+Automation
 
-If you want automatic data download:
+Set it and forget it
+Team always has fresh data
+No manual downloads needed
+Flexibility
 
-### Requirements:
-- Chrome browser installed
-- ChromeDriver installed: `brew install chromedriver` (Mac)
+Scheduled automatic downloads
+Manual on-demand downloads
+Manual upload as backup
+📝 Files Explained
+.github/workflows/download-rms2-data.yml
+GitHub Actions workflow configuration. Defines:
 
-### Setup:
-1. Update `.env` file with your RMS2 password (replace XXXXXXXX)
-2. In dashboard, select "🤖 Auto Download"
-3. Click "Download Data & Generate Report"
+When to run (schedule + manual trigger)
+What to do (install, download, commit)
+Environment variables and secrets
+download_rms2_data.py
+Python script that:
 
----
+Logs into RMS2 using Playwright
+Implements two-step download (Display → Export)
+Downloads both 24M and 12M files
+Saves to data/ folder
+streamlit_app.py
+Streamlit dashboard that:
 
-## 📊 Report Output
+Detects auto-downloaded files
+Shows "Use Auto-Downloaded Data" mode
+Shows last update timestamp
+Still supports manual upload
+Generates reports with Koenig branding
+🎓 Learn More
+GitHub Actions: Full guide in GITHUB_ACTIONS_SETUP.md
+Workflow logs: Actions tab in your repository
+Cron schedules: crontab.guru
+✨ You're Ready!
+Just upload the files, add secrets, enable permissions, and you're done!
 
-Your Excel file contains **4 sheets**:
+The system will:
 
-1. **Growth Comparison** - All clients with revenue growth
-2. **High Growth 5K-50K USD** - Clients who crossed $50K threshold (15 clients)
-3. **Summary** - Statistics and biggest mover
-4. **Exceptions** - Data quality issues
-
----
-
-## 🌐 Deploy to Cloud (Optional)
-
-Want to access from anywhere?
-
-1. **Push to GitHub**:
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/YOUR_USERNAME/rms2-dashboard.git
-git push -u origin main
-```
-
-2. **Deploy on Streamlit Cloud**:
-   - Go to: https://share.streamlit.io/
-   - Connect your GitHub repo
-   - Click "Deploy"
-
-3. **Access anywhere**:
-   - Your app URL: `https://your-app-name.streamlit.app`
-
-See `GITHUB_DEPLOYMENT.md` for detailed instructions.
-
----
-
-## 🐛 Troubleshooting
-
-**Issue: "pip not found"**
-```bash
-# Install Python 3.12 first
-brew install python@3.12  # macOS
-```
-
-**Issue: "streamlit: command not found"**
-```bash
-pip3 install streamlit
-```
-
-**Issue: "Can't upload files"**
-- Check file format is `.xlsx`
-- File size should be < 200MB
-- Try refreshing the page
-
----
-
-## 📁 Project Structure
-
-```
-rms2_streamlit_package/
-├── streamlit_app.py          # Main dashboard (run this!)
-├── process_report.py          # Report generation logic
-├── download_rms2_data.py      # Auto-download (optional)
-├── requirements.txt           # Dependencies
-├── .env                       # RMS2 credentials
-├── README.md                  # Full documentation
-├── QUICK_START.md            # This file
-└── GITHUB_DEPLOYMENT.md      # Cloud deployment guide
-```
-
----
-
-## ✅ Success Checklist
-
-- [ ] Extracted zip file
-- [ ] Installed dependencies
-- [ ] Dashboard opens at http://localhost:8501
-- [ ] Can see Koenig logo
-- [ ] File upload widgets visible
-- [ ] Can upload Excel files
-- [ ] Report generates successfully
-- [ ] Can download Excel report
-
----
-
-## 🎯 Key Features
-
-- ✅ **Simple file upload** - Built-in Streamlit widgets
-- ✅ **No ChromeDriver needed** - For manual upload mode
-- ✅ **Fixed High Growth filter** - Correct 15 clients
-- ✅ **Koenig branding** - Professional interface
-- ✅ **4-sheet Excel reports** - Comprehensive analysis
-- ✅ **Deploy anywhere** - Local or Streamlit Cloud
-
----
-
-## 📞 Need Help?
-
-1. Check `README.md` for full documentation
-2. See `GITHUB_DEPLOYMENT.md` for cloud deployment
-3. Review `COMPLETION_SUMMARY.md` for technical details
-
----
-
-## 🎉 You're Ready!
-
-**Run this command:**
-```bash
-streamlit run streamlit_app.py
-```
-
-**Open browser:**
-```
-http://localhost:8501
-```
-
-**Upload files and generate your report!** 🚀
-
-**Total time: 2 minutes** ⚡
+✅ Download files automatically every month
+✅ Make them available to Streamlit
+✅ Let your team generate reports anytime
+✅ Keep working reliably without manual intervention
+Happy reporting! 📊

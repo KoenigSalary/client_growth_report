@@ -1,1 +1,85 @@
-bmFtZTogRG93bmxvYWQgUk1TMiBEYXRhCgpvbjoKICAjIFJ1biBtb250aGx5IG9uIHRoZSAxc3QgYXQgNiBBTSBVVEMKICBzY2hlZHVsZToKICAgIC0gY3JvbjogJzAgNiAxICogKicKICAKICAjIEFsbG93IG1hbnVhbCB0cmlnZ2VyCiAgd29ya2Zsb3dfZGlzcGF0Y2g6Cgpqb2JzOgogIGRvd25sb2FkLWRhdGE6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICAKICAgIHN0ZXBzOgogICAgICAtIG5hbWU6IENoZWNrb3V0IHJlcG9zaXRvcnkKICAgICAgICB1c2VzOiBhY3Rpb25zL2NoZWNrb3V0QHY0CiAgICAgIAogICAgICAtIG5hbWU6IFNldCB1cCBQeXRob24KICAgICAgICB1c2VzOiBhY3Rpb25zL3NldHVwLXB5dGhvbkB2NAogICAgICAgIHdpdGg6CiAgICAgICAgICBweXRob24tdmVyc2lvbjogJzMuMTEnCiAgICAgIAogICAgICAtIG5hbWU6IEluc3RhbGwgZGVwZW5kZW5jaWVzCiAgICAgICAgcnVuOiB8CiAgICAgICAgICBweXRob24gLW0gcGlwIGluc3RhbGwgLS11cGdyYWRlIHBpcAogICAgICAgICAgcGlwIGluc3RhbGwgcGxheXdyaWdodCBweXRob24tZG90ZW52CiAgICAgIAogICAgICAtIG5hbWU6IEluc3RhbGwgUGxheXdyaWdodCBicm93c2VycwogICAgICAgIHJ1bjogfAogICAgICAgICAgcGxheXdyaWdodCBpbnN0YWxsIGNocm9taXVtCiAgICAgICAgICBwbGF5d3JpZ2h0IGluc3RhbGwtZGVwcyBjaHJvbWl1bQogICAgICAKICAgICAgLSBuYW1lOiBDcmVhdGUgZGF0YSBkaXJlY3RvcnkKICAgICAgICBydW46IG1rZGlyIC1wIGRhdGEKICAgICAgCiAgICAgIC0gbmFtZTogRG93bmxvYWQgUk1TMiBkYXRhIGZpbGVzCiAgICAgICAgZW52OgogICAgICAgICAgUk1TX1VTRVJOQU1FOiAke3sgc2VjcmV0cy5STVNfVVNFUk5BTUUgfX0KICAgICAgICAgIFJNU19QQVNTV09SRDogJHt7IHNlY3JldHMuUk1TX1BBU1NXT1JEIH19CiAgICAgICAgICBSTVNfTE9HSU5fVVJMOiAnaHR0cHM6Ly9ybXMyLmtvZW5pZy1zb2x1dGlvbnMuY29tJwogICAgICAgICAgUkNCX0JBU0VfVVJMOiAnaHR0cHM6Ly9ybXMyLmtvZW5pZy1zb2x1dGlvbnMuY29tL1JDQicKICAgICAgICBydW46IHwKICAgICAgICAgIHB5dGhvbiBkb3dubG9hZF9ybXMyX2RhdGEucHkKICAgICAgCiAgICAgIC0gbmFtZTogVmVyaWZ5IGRvd25sb2FkZWQgZmlsZXMKICAgICAgICBydW46IHwKICAgICAgICAgIGVjaG8gIkNoZWNraW5nIGRvd25sb2FkZWQgZmlsZXMuLi4iCiAgICAgICAgICBscyAtbGggZGF0YS8KICAgICAgICAgIAogICAgICAgICAgaWYgWyAhIC1mICJkYXRhL1JDQl8yNG1vbnRocy54bHN4IiBdOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIkVSUk9SOiBSQ0JfMjRtb250aHMueGxzeCBub3QgZm91bmQiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIAogICAgICAgICAgaWYgWyAhIC1mICJkYXRhL1JDQl8xMm1vbnRocy54bHN4IiBdOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIkVSUk9SOiBSQ0JfMTJtb250aHMueGxzeCBub3QgZm91bmQiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIAogICAgICAgICAgZWNobyAiQm90aCBmaWxlcyBkb3dubG9hZGVkIHN1Y2Nlc3NmdWxseSEiCiAgICAgIAogICAgICAtIG5hbWU6IENvbmZpZ3VyZSBHaXQKICAgICAgICBydW46IHwKICAgICAgICAgIGdpdCBjb25maWcgLS1sb2NhbCB1c2VyLmVtYWlsICJnaXRodWItYWN0aW9uc1tib3RdQHVzZXJzLm5vcmVwbHkuZ2l0aHViLmNvbSIKICAgICAgICAgIGdpdCBjb25maWcgLS1sb2NhbCB1c2VyLm5hbWUgIkdpdEh1YiBBY3Rpb25zIEJvdCIKICAgICAgCiAgICAgIC0gbmFtZTogQ29tbWl0IGFuZCBwdXNoIGRhdGEgZmlsZXMKICAgICAgICBydW46IHwKICAgICAgICAgIGdpdCBhZGQgZGF0YS8qLnhsc3gKICAgICAgICAgIAogICAgICAgICAgaWYgZ2l0IGRpZmYgLS1zdGFnZWQgLS1xdWlldDsgdGhlbgogICAgICAgICAgICBlY2hvICJObyBjaGFuZ2VzIHRvIGNvbW1pdCIKICAgICAgICAgIGVsc2UKICAgICAgICAgICAgZ2l0IGNvbW1pdCAtbSAiVXBkYXRlIFJNUzIgZGF0YSBmaWxlcyAtICQoZGF0ZSArJyVZLSVtLSVkICVIOiVNOiVTIFVUQycpIgogICAgICAgICAgICBnaXQgcHVzaAogICAgICAgICAgZmkKICAgICAgCiAgICAgIC0gbmFtZTogVXBsb2FkIGVycm9yIHNjcmVlbnNob3RzIChpZiBhbnkpCiAgICAgICAgaWY6IGZhaWx1cmUoKQogICAgICAgIHVzZXM6IGFjdGlvbnMvdXBsb2FkLWFydGlmYWN0QHYzCiAgICAgICAgd2l0aDoKICAgICAgICAgIG5hbWU6IGVycm9yLXNjcmVlbnNob3RzCiAgICAgICAgICBwYXRoOiBkYXRhLypfZXJyb3IucG5nCiAgICAgICAgICBpZi1uby1maWxlcy1mb3VuZDogaWdub3JlCg==
+name: Download RMS2 Data
+
+on:
+  # Run monthly on the 1st at 6 AM UTC
+  schedule:
+    - cron: '0 6 1 * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  download-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright python-dotenv
+      
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+      
+      - name: Create data directory
+        run: mkdir -p data
+      
+      - name: Download RMS2 data files
+        env:
+          RMS_USERNAME: ${{ secrets.RMS_USERNAME }}
+          RMS_PASSWORD: ${{ secrets.RMS_PASSWORD }}
+          RMS_LOGIN_URL: 'https://rms2.koenig-solutions.com'
+          RCB_BASE_URL: 'https://rms2.koenig-solutions.com/RCB'
+        run: |
+          python download_rms2_data.py
+      
+      - name: Verify downloaded files
+        run: |
+          echo "Checking downloaded files..."
+          ls -lh data/
+          
+          if [ ! -f "data/RCB_24months.xlsx" ]; then
+            echo "ERROR: RCB_24months.xlsx not found"
+            exit 1
+          fi
+          
+          if [ ! -f "data/RCB_12months.xlsx" ]; then
+            echo "ERROR: RCB_12months.xlsx not found"
+            exit 1
+          fi
+          
+          echo "Both files downloaded successfully!"
+      
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+      
+      - name: Commit and push data files
+        run: |
+          git add data/*.xlsx
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update RMS2 data files - $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git push
+          fi
+      
+      - name: Upload error screenshots (if any)
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: error-screenshots
+          path: data/*_error.png
+          if-no-files-found: ignore

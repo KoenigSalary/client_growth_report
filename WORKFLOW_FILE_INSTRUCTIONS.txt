@@ -1,0 +1,124 @@
+================================================================================
+HOW TO UPLOAD THE WORKFLOW FILE TO GITHUB
+================================================================================
+
+The file: download-rms2-data.yml
+
+Must be placed at this exact location in your GitHub repository:
+  .github/workflows/download-rms2-data.yml
+
+================================================================================
+METHOD 1: CREATE FOLDER STRUCTURE IN GITHUB (EASIEST)
+================================================================================
+
+1. Go to your GitHub repository
+2. Click "Add file" → "Create new file"
+3. In the file name field, type:
+   .github/workflows/download-rms2-data.yml
+   
+   Note: GitHub will automatically create the folders when you type the path
+   
+4. Copy and paste the entire content from download-rms2-data.yml file
+5. Scroll down and click "Commit new file"
+
+================================================================================
+METHOD 2: UPLOAD VIA COMMAND LINE
+================================================================================
+
+If you have git installed locally:
+
+1. Clone your repository:
+   git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+   cd YOUR_REPO
+
+2. Create the folder structure:
+   mkdir -p .github/workflows
+
+3. Copy the workflow file:
+   cp /path/to/download-rms2-data.yml .github/workflows/
+
+4. Commit and push:
+   git add .github/workflows/download-rms2-data.yml
+   git commit -m "Add GitHub Actions workflow for automated downloads"
+   git push
+
+================================================================================
+METHOD 3: CREATE FOLDER THEN UPLOAD FILE
+================================================================================
+
+1. Create the .github folder:
+   - Go to your repo
+   - Click "Add file" → "Create new file"
+   - Type: .github/README.md
+   - Add any content (e.g., "GitHub configuration folder")
+   - Commit
+
+2. Create the workflows folder:
+   - In .github folder, click "Add file" → "Create new file"
+   - Type: workflows/README.md
+   - Add any content
+   - Commit
+
+3. Upload the workflow file:
+   - In .github/workflows/ folder
+   - Click "Add file" → "Upload files"
+   - Upload download-rms2-data.yml
+   - Commit
+
+================================================================================
+VERIFY IT WORKED
+================================================================================
+
+After uploading, verify the file location:
+
+1. Go to your repository Code tab
+2. You should see folder structure:
+   └── .github/
+       └── workflows/
+           └── download-rms2-data.yml
+
+3. Go to Actions tab
+4. You should see "Download RMS2 Data" workflow in the left sidebar
+
+If you see the workflow in Actions tab = SUCCESS! ✅
+
+================================================================================
+FILE CONTENT PREVIEW
+================================================================================
+
+The workflow file contains:
+- Schedule: Monthly on 1st at 6 AM UTC (cron: '0 6 1 * *')
+- Manual trigger: workflow_dispatch
+- Steps: Install Playwright → Download files → Commit to repo
+- Environment variables: Uses GitHub secrets for credentials
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Issue: "Workflow not appearing in Actions tab"
+→ Check file is at: .github/workflows/download-rms2-data.yml (exact path)
+→ Check file extension is .yml not .yml.txt
+→ Wait 1-2 minutes after upload for GitHub to detect
+
+Issue: "Unable to create file with path .github/workflows/..."
+→ Use Method 1 above - type the full path in one go
+→ GitHub will create folders automatically
+
+Issue: "File uploaded but in wrong location"
+→ Delete the file
+→ Use Method 1 to create it in correct location
+
+================================================================================
+NEXT STEPS AFTER UPLOAD
+================================================================================
+
+1. ✅ Upload workflow file (you're doing this now)
+2. ⬜ Add GitHub secrets (RMS_USERNAME, RMS_PASSWORD)
+3. ⬜ Enable workflow permissions
+4. ⬜ Test with manual trigger
+5. ⬜ Verify files downloaded to data/ folder
+
+See QUICK_START.md for complete setup instructions.
+
+================================================================================

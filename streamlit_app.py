@@ -1,7 +1,6 @@
 """
-Client Growth Report - Streamlit Dashboard
-Simple, clean interface for generating growth reports
-Supports both auto-downloaded files (from GitHub Actions) and manual upload
+Client Growth Report - Streamlit Dashboard WITH DIAGNOSTICS
+This version shows detailed error information to help debug issues
 """
 
 import streamlit as st
@@ -10,6 +9,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 import time
+import traceback
 
 # Page configuration
 st.set_page_config(
@@ -53,10 +53,10 @@ st.markdown("""
         border-radius: 4px;
         margin: 1rem 0;
     }
-    .warning-box {
+    .error-box {
         padding: 1rem;
-        background-color: #fff3e0;
-        border-left: 4px solid #ff9800;
+        background-color: #ffebee;
+        border-left: 4px solid #f44336;
         border-radius: 4px;
         margin: 1rem 0;
     }
@@ -79,7 +79,6 @@ with col1:
     st.markdown("**Powered by Koenig Solutions**")
 with col2:
     st.markdown("### ")
-    st.markdown("### ")
 
 st.markdown("---")
 
@@ -90,10 +89,6 @@ LOGIN_PASSWORD = "koenig2024"
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
-if 'report_generated' not in st.session_state:
-    st.session_state.report_generated = False
-if 'report_path' not in st.session_state:
-    st.session_state.report_path = None
 
 # ===== LOGIN PAGE =====
 if not st.session_state.authenticated:
@@ -101,7 +96,6 @@ if not st.session_state.authenticated:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Show Koenig logo
         logo_path = "assets/koenig_logo.png"
         if os.path.exists(logo_path):
             st.image(logo_path, width=300)
@@ -130,16 +124,12 @@ if not st.session_state.authenticated:
 
 # Sidebar
 with st.sidebar:
-    # Use local logo file
     logo_path = "assets/koenig_logo.png"
     if os.path.exists(logo_path):
         st.image(logo_path, width=200)
-    else:
-        # Fallback to URL if local file not found
-        st.image("https://page.gensparksite.com/v1/base64_upload/9059197631dfa630291fc03acffc1eb4", width=200)
+    
     st.markdown("### Options")
     
-    # Check if auto-downloaded files exist
     auto_files_exist = (Path('data/RCB_24months.xlsx').exists() and 
                        Path('data/RCB_12months.xlsx').exists())
     
@@ -169,78 +159,138 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🚪 Logout", key="logout"):
         st.session_state.authenticated = False
-        st.session_state.report_generated = False
-        st.session_state.report_path = None
         st.rerun()
 
 
-def generate_report_from_files(file_24m_path, file_12m_path, source="auto"):
-    """Generate report from file paths"""
+def show_dataframe_info(df, file_name):
+    """Show diagnostic information about a dataframe"""
+    st.write(f"**{file_name} Information:**")
+    st.write(f"- Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+    st.write(f"- Columns: {', '.join(df.columns.tolist())}")
+    
+    with st.expander(f"Show first 5 rows of {file_name}"):
+        st.dataframe(df.head())
+
+
+def generate_report_with_diagnostics(file_24m_path, file_12m_path, source="manual"):
+    """Generate report with detailed diagnostics"""
+    
+    st.subheader("📊 Report Generation Progress")
+    
     try:
-        # Progress bar
+        # Step 1: Read files
+        st.write("**Step 1: Reading files...**")
+        
+        try:
+            df_24m = pd.read_excel(file_24m_path)
+            st.success(f"✅ Successfully read 24-month file")
+            show_dataframe_info(df_24m, "24-Month Data")
+        except Exception as e:
+            st.error(f"❌ Error reading 24-month file: {str(e)}")
+            st.code(traceback.format_exc())
+            return False
+        
+        try:
+            df_12m = pd.read_excel(file_12m_path)
+            st.success(f"✅ Successfully read 12-month file")
+            show_dataframe_info(df_12m, "12-Month Data")
+        except Exception as e:
+            st.error(f"❌ Error reading 12-month file: {str(e)}")
+            st.code(traceback.format_exc())
+            return False
+        
+        st.markdown("---")
+        
+        # Step 2: Check required columns
+        st.write("**Step 2: Checking required columns...**")
+        
+        required_columns_24m = ['CorporateID', 'CorporateName', 'TotalNR1']
+        required_columns_12m = ['CorporateID', 'TotalNR1']
+        
+        missing_24m = [col for col in required_columns_24m if col not in df_24m.columns]
+        missing_12m = [col for col in required_columns_12m if col not in df_12m.columns]
+        
+        if missing_24m:
+            st.error(f"❌ Missing columns in 24-month file: {', '.join(missing_24m)}")
+            st.write("**Available columns:**", ', '.join(df_24m.columns.tolist()))
+            return False
+        else:
+            st.success("✅ All required columns found in 24-month file")
+        
+        if missing_12m:
+            st.error(f"❌ Missing columns in 12-month file: {', '.join(missing_12m)}")
+            st.write("**Available columns:**", ', '.join(df_12m.columns.tolist()))
+            return False
+        else:
+            st.success("✅ All required columns found in 12-month file")
+        
+        st.markdown("---")
+        
+        # Step 3: Process report
+        st.write("**Step 3: Processing report...**")
+        
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Step 1: Read files
-        status_text.text("📖 Reading data files...")
-        progress_bar.progress(20)
-        df_24m = pd.read_excel(file_24m_path)
-        df_12m = pd.read_excel(file_12m_path)
-        
-        # Step 2: Process data
-        status_text.text("⚙️ Processing data and calculating growth...")
-        progress_bar.progress(40)
-        
-        from process_report import process_growth_report
-        
-        # Step 3: Generate report
-        status_text.text("📊 Generating Excel report...")
-        progress_bar.progress(60)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_dir = Path('generated_reports')
-        output_dir.mkdir(exist_ok=True)
-        output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
-        
-        result = process_growth_report(df_24m, df_12m, str(output_file))
-        
-        # Step 4: Complete
-        progress_bar.progress(100)
-        status_text.text("✅ Report generated successfully!")
-        
-        st.session_state.report_generated = True
-        st.session_state.report_path = str(output_file)
-        
-        # Display summary with error handling
-        st.markdown(f"""
-        <div class="success-box">
-        <h3>✅ Report Generated Successfully!</h3>
-        <p><strong>Summary:</strong></p>
-        <ul>
-            <li>Total clients analyzed: {result.get('total_clients', 'N/A'):,}</li>
-            <li>High growth clients (≤$5K → ≥$50K): {result.get('high_growth_count', 'N/A')}</li>
-            <li>Average growth: {result.get('avg_growth', 0):.1f}%</li>
-            <li>Report saved: <code>{output_file.name}</code></li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Download button
-        with open(output_file, 'rb') as f:
-            st.download_button(
-                label="📥 Download Excel Report",
-                data=f,
-                file_name=output_file.name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key=f'download_{source}'
-            )
-        
-        return True
+        try:
+            status_text.text("⚙️ Processing data and calculating growth...")
+            progress_bar.progress(40)
+            
+            from process_report import process_growth_report
+            
+            status_text.text("📊 Generating Excel report...")
+            progress_bar.progress(60)
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_dir = Path('generated_reports')
+            output_dir.mkdir(exist_ok=True)
+            output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
+            
+            result = process_growth_report(df_24m, df_12m, str(output_file))
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Report generated successfully!")
+            
+            st.markdown("---")
+            
+            # Display summary
+            st.markdown(f"""
+            <div class="success-box">
+            <h3>✅ Report Generated Successfully!</h3>
+            <p><strong>Summary:</strong></p>
+            <ul>
+                <li>Total clients analyzed: {result.get('total_clients', 'N/A')}</li>
+                <li>High growth clients (≤$5K → ≥$50K): {result.get('high_growth_count', 'N/A')}</li>
+                <li>Average growth: {result.get('avg_growth', 0):.1f}%</li>
+                <li>Report saved: <code>{output_file.name}</code></li>
+            </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Download button
+            with open(output_file, 'rb') as f:
+                st.download_button(
+                    label="📥 Download Excel Report",
+                    data=f,
+                    file_name=output_file.name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f'download_{source}'
+                )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error during report generation: {str(e)}")
+            st.markdown("""
+            <div class="error-box">
+            <strong>🔍 Debug Information:</strong>
+            </div>
+            """, unsafe_allow_html=True)
+            st.code(traceback.format_exc())
+            return False
         
     except Exception as e:
-        st.error(f"❌ Error generating report: {str(e)}")
-        import traceback
-        st.error("**Debug Information:**")
+        st.error(f"❌ Unexpected error: {str(e)}")
         st.code(traceback.format_exc())
         return False
 
@@ -249,12 +299,10 @@ def generate_report_from_files(file_24m_path, file_12m_path, source="auto"):
 if option == "🤖 Use Auto-Downloaded Data":
     st.header("🤖 Auto-Downloaded Data")
     
-    # Show data update info
     file_24m_path = Path('data/RCB_24months.xlsx')
     file_12m_path = Path('data/RCB_12months.xlsx')
     
     if file_24m_path.exists() and file_12m_path.exists():
-        # Get last modified time
         last_update_24m = datetime.fromtimestamp(file_24m_path.stat().st_mtime)
         last_update_12m = datetime.fromtimestamp(file_12m_path.stat().st_mtime)
         last_update = max(last_update_24m, last_update_12m)
@@ -270,22 +318,12 @@ if option == "🤖 Use Auto-Downloaded Data":
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("""
-        <div class="info-box">
-        <strong>ℹ️ About Auto-Download:</strong><br>
-        Data is automatically downloaded monthly via GitHub Actions on the 1st of each month at 6 AM UTC.
-        You can also trigger manual downloads from the GitHub Actions tab in your repository.
-        </div>
-        """, unsafe_allow_html=True)
-        
         st.markdown("---")
         
-        # Generate Report Button
         if st.button("📊 Generate Client Growth Report", key='generate_auto'):
-            with st.spinner("Generating report... This may take 1-2 minutes..."):
-                generate_report_from_files(file_24m_path, file_12m_path, "auto")
+            generate_report_with_diagnostics(file_24m_path, file_12m_path, "auto")
     else:
-        st.warning("⚠️ Auto-downloaded data files not found. Please use Manual Upload mode or wait for the next scheduled download.")
+        st.warning("⚠️ Auto-downloaded data files not found. Please use Manual Upload mode.")
 
 else:  # Manual Upload
     st.header("📥 Upload Data Files")
@@ -325,30 +363,26 @@ else:  # Manual Upload
     
     st.markdown("---")
     
-    # Generate Report Button
     if st.button("📊 Generate Client Growth Report", key='generate_manual', disabled=not (file_24m and file_12m)):
-        with st.spinner("Generating report... This may take 1-2 minutes..."):
-            # Save uploaded files temporarily
-            data_dir = Path('data')
-            data_dir.mkdir(exist_ok=True)
-            
-            # Save 24-month file
-            temp_24m = data_dir / 'temp_RCB_24months.xlsx'
-            with open(temp_24m, 'wb') as f:
-                f.write(file_24m.getbuffer())
-            
-            # Save 12-month file
-            temp_12m = data_dir / 'temp_RCB_12months.xlsx'
-            with open(temp_12m, 'wb') as f:
-                f.write(file_12m.getbuffer())
-            
-            # Generate report
-            generate_report_from_files(temp_24m, temp_12m, "manual")
+        # Save uploaded files temporarily
+        data_dir = Path('data')
+        data_dir.mkdir(exist_ok=True)
+        
+        temp_24m = data_dir / 'temp_RCB_24months.xlsx'
+        with open(temp_24m, 'wb') as f:
+            f.write(file_24m.getbuffer())
+        
+        temp_12m = data_dir / 'temp_RCB_12months.xlsx'
+        with open(temp_12m, 'wb') as f:
+            f.write(file_12m.getbuffer())
+        
+        # Generate report with diagnostics
+        generate_report_with_diagnostics(temp_24m, temp_12m, "manual")
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    <small>Client Growth Report Generator v2.0 | © 2024 Koenig Solutions</small>
+    <small>Client Growth Report Generator v2.0 (Diagnostic Mode) | © 2024 Koenig Solutions</small>
 </div>
 """, unsafe_allow_html=True)

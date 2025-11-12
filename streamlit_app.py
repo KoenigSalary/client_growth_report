@@ -173,6 +173,78 @@ with st.sidebar:
         st.session_state.report_path = None
         st.rerun()
 
+
+def generate_report_from_files(file_24m_path, file_12m_path, source="auto"):
+    """Generate report from file paths"""
+    try:
+        # Progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Step 1: Read files
+        status_text.text("📖 Reading data files...")
+        progress_bar.progress(20)
+        df_24m = pd.read_excel(file_24m_path)
+        df_12m = pd.read_excel(file_12m_path)
+        
+        # Step 2: Process data
+        status_text.text("⚙️ Processing data and calculating growth...")
+        progress_bar.progress(40)
+        
+        from process_report import process_growth_report
+        
+        # Step 3: Generate report
+        status_text.text("📊 Generating Excel report...")
+        progress_bar.progress(60)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path('generated_reports')
+        output_dir.mkdir(exist_ok=True)
+        output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
+        
+        result = process_growth_report(df_24m, df_12m, str(output_file))
+        
+        # Step 4: Complete
+        progress_bar.progress(100)
+        status_text.text("✅ Report generated successfully!")
+        
+        st.session_state.report_generated = True
+        st.session_state.report_path = str(output_file)
+        
+        # Display summary with error handling
+        st.markdown(f"""
+        <div class="success-box">
+        <h3>✅ Report Generated Successfully!</h3>
+        <p><strong>Summary:</strong></p>
+        <ul>
+            <li>Total clients analyzed: {result.get('total_clients', 'N/A'):,}</li>
+            <li>High growth clients (≤$5K → ≥$50K): {result.get('high_growth_count', 'N/A')}</li>
+            <li>Average growth: {result.get('avg_growth', 0):.1f}%</li>
+            <li>Report saved: <code>{output_file.name}</code></li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Download button
+        with open(output_file, 'rb') as f:
+            st.download_button(
+                label="📥 Download Excel Report",
+                data=f,
+                file_name=output_file.name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f'download_{source}'
+            )
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Error generating report: {str(e)}")
+        import traceback
+        st.error("**Debug Information:**")
+        st.code(traceback.format_exc())
+        return False
+
+
 # Main content area
 if option == "🤖 Use Auto-Downloaded Data":
     st.header("🤖 Auto-Downloaded Data")
@@ -211,67 +283,7 @@ if option == "🤖 Use Auto-Downloaded Data":
         # Generate Report Button
         if st.button("📊 Generate Client Growth Report", key='generate_auto'):
             with st.spinner("Generating report... This may take 1-2 minutes..."):
-                try:
-                    # Progress bar
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    # Step 1: Read files
-                    status_text.text("📖 Reading data files...")
-                    progress_bar.progress(20)
-                    df_24m = pd.read_excel(file_24m_path)
-                    df_12m = pd.read_excel(file_12m_path)
-                    
-                    # Step 2: Process data
-                    status_text.text("⚙️ Processing data and calculating growth...")
-                    progress_bar.progress(40)
-                    
-                    from process_report import process_growth_report
-                    
-                    # Step 3: Generate report
-                    status_text.text("📊 Generating Excel report...")
-                    progress_bar.progress(60)
-                    
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    output_dir = Path('generated_reports')
-                    output_dir.mkdir(exist_ok=True)
-                    output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
-                    
-                    result = process_growth_report(df_24m, df_12m, str(output_file))
-                    
-                    # Step 4: Complete
-                    progress_bar.progress(100)
-                    status_text.text("✅ Report generated successfully!")
-                    
-                    st.session_state.report_generated = True
-                    st.session_state.report_path = str(output_file)
-                    
-                    st.markdown(f"""
-                    <div class="success-box">
-                    <h3>✅ Report Generated Successfully!</h3>
-                    <p><strong>Summary:</strong></p>
-                    <ul>
-                        <li>Total clients analyzed: {result['total_clients']:,}</li>
-                        <li>High growth clients (≤$5K → ≥$50K): {result['high_growth_count']}</li>
-                        <li>Average growth: {result['avg_growth']:.1f}%</li>
-                        <li>Report saved: <code>{output_file.name}</code></li>
-                    </ul>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Download button
-                    with open(output_file, 'rb') as f:
-                        st.download_button(
-                            label="📥 Download Excel Report",
-                            data=f,
-                            file_name=output_file.name,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key='download_auto'
-                        )
-                    
-                except Exception as e:
-                    st.error(f"❌ Error generating report: {str(e)}")
-                    st.exception(e)
+                generate_report_from_files(file_24m_path, file_12m_path, "auto")
     else:
         st.warning("⚠️ Auto-downloaded data files not found. Please use Manual Upload mode or wait for the next scheduled download.")
 
@@ -316,79 +328,22 @@ else:  # Manual Upload
     # Generate Report Button
     if st.button("📊 Generate Client Growth Report", key='generate_manual', disabled=not (file_24m and file_12m)):
         with st.spinner("Generating report... This may take 1-2 minutes..."):
-            try:
-                # Save uploaded files temporarily
-                data_dir = Path('data')
-                data_dir.mkdir(exist_ok=True)
-                
-                # Save 24-month file
-                with open(data_dir / 'RCB_24months.xlsx', 'wb') as f:
-                    f.write(file_24m.getbuffer())
-                
-                # Save 12-month file
-                with open(data_dir / 'RCB_12months.xlsx', 'wb') as f:
-                    f.write(file_12m.getbuffer())
-                
-                # Progress bar
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # Step 1: Read files
-                status_text.text("📖 Reading data files...")
-                progress_bar.progress(20)
-                df_24m = pd.read_excel(data_dir / 'RCB_24months.xlsx')
-                df_12m = pd.read_excel(data_dir / 'RCB_12months.xlsx')
-                
-                # Step 2: Process data
-                status_text.text("⚙️ Processing data and calculating growth...")
-                progress_bar.progress(40)
-                
-                from process_report import process_growth_report
-                
-                # Step 3: Generate report
-                status_text.text("📊 Generating Excel report...")
-                progress_bar.progress(60)
-                
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                output_dir = Path('generated_reports')
-                output_dir.mkdir(exist_ok=True)
-                output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
-                
-                result = process_growth_report(df_24m, df_12m, str(output_file))
-                
-                # Step 4: Complete
-                progress_bar.progress(100)
-                status_text.text("✅ Report generated successfully!")
-                
-                st.session_state.report_generated = True
-                st.session_state.report_path = str(output_file)
-                
-                st.markdown(f"""
-                <div class="success-box">
-                <h3>✅ Report Generated Successfully!</h3>
-                <p><strong>Summary:</strong></p>
-                <ul>
-                    <li>Total clients analyzed: {result['total_clients']:,}</li>
-                    <li>High growth clients (≤$5K → ≥$50K): {result['high_growth_count']}</li>
-                    <li>Average growth: {result['avg_growth']:.1f}%</li>
-                    <li>Report saved: <code>{output_file.name}</code></li>
-                </ul>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Download button
-                with open(output_file, 'rb') as f:
-                    st.download_button(
-                        label="📥 Download Excel Report",
-                        data=f,
-                        file_name=output_file.name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key='download_manual'
-                    )
-                
-            except Exception as e:
-                st.error(f"❌ Error generating report: {str(e)}")
-                st.exception(e)
+            # Save uploaded files temporarily
+            data_dir = Path('data')
+            data_dir.mkdir(exist_ok=True)
+            
+            # Save 24-month file
+            temp_24m = data_dir / 'temp_RCB_24months.xlsx'
+            with open(temp_24m, 'wb') as f:
+                f.write(file_24m.getbuffer())
+            
+            # Save 12-month file
+            temp_12m = data_dir / 'temp_RCB_12months.xlsx'
+            with open(temp_12m, 'wb') as f:
+                f.write(file_12m.getbuffer())
+            
+            # Generate report
+            generate_report_from_files(temp_24m, temp_12m, "manual")
 
 # Footer
 st.markdown("---")

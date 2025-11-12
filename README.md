@@ -1,144 +1,265 @@
-# RMS2 Client Growth Report - Streamlit Dashboard
+Client Growth Report - Automated Solution
+🎯 Architecture Overview
+This solution uses GitHub Actions for automated data downloads and Streamlit for report generation.
 
-A simple, elegant dashboard for generating client growth reports from RMS2 data.
+┌─────────────────────────────────────────┐
+│       GitHub Actions (Monthly)          │
+│  ┌─────────────────────────────────┐   │
+│  │ 1. Install Playwright           │   │
+│  │ 2. Login to RMS2                │   │
+│  │ 3. Download 24M data            │   │
+│  │ 4. Download 12M data            │   │
+│  │ 5. Commit to repo               │   │
+│  └─────────────────────────────────┘   │
+└─────────────────┬───────────────────────┘
+                  │
+                  │ Files: RCB_24months.xlsx
+                  │        RCB_12months.xlsx
+                  ↓
+┌─────────────────────────────────────────┐
+│         Streamlit Dashboard             │
+│  ┌─────────────────────────────────┐   │
+│  │ • Read auto-downloaded files    │   │
+│  │ • Generate growth reports       │   │
+│  │ • Apply Koenig branding         │   │
+│  │ • Export to Excel               │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  Backup: Manual upload still available │
+└─────────────────────────────────────────┘
+📁 Project Structure
+client-growth-report/
+├── .github/
+│   └── workflows/
+│       └── download-rms2-data.yml    # Auto-download workflow (runs monthly)
+├── assets/
+│   └── koenig_logo.png               # Koenig branding logo
+├── data/                             # Auto-downloaded files (created by workflow)
+│   ├── RCB_24months.xlsx            
+│   └── RCB_12months.xlsx            
+├── generated_reports/                # Generated reports (created by Streamlit)
+│   └── Client_Growth_Report_*.xlsx  
+├── streamlit_app.py                  # Main Streamlit dashboard
+├── process_report.py                 # Report generation logic
+├── download_rms2_data.py             # Download script (used by GitHub Actions)
+├── requirements.txt                  # Python dependencies
+├── QUICK_START.md                    # Quick setup guide
+├── GITHUB_ACTIONS_SETUP.md           # Detailed setup instructions
+└── README.md                         # This file
+✨ Features
+Automated Downloads
+✅ Monthly schedule: Runs on 1st of each month at 6 AM UTC
+✅ Manual trigger: On-demand downloads anytime
+✅ Two-step process: Correctly implements RMS2's Display → Export workflow
+✅ Error handling: Screenshots and logs on failures
+✅ Auto-commit: Files automatically saved to repository
+Report Generation
+✅ High Growth Filter: Previous ≤$5K, Current ≥$50K (exactly 15 clients)
+✅ 4-Sheet Excel: Growth Comparison, High Growth, Summary, Exceptions
+✅ USD Conversion: INR to USD at rate 84, whole numbers
+✅ Client URLs: Direct links to RMS2 corporate pages
+✅ Top Performers: Highlighted in green
+User Interface
+✅ Koenig Branding: Blue theme (#0099cc), logo in sidebar
+✅ Login Protection: admin / koenig2024
+✅ Dual Modes: Auto-downloaded data + Manual upload backup
+✅ Data Freshness: Shows last update timestamp
+✅ Clean UI: No technical jargon, user-friendly
+🚀 Quick Setup
+1. Upload to GitHub
+Upload these files to your repository:
 
-## 🌟 Features
+Copy.github/workflows/download-rms2-data.yml
+streamlit_app.py
+process_report.py
+download_rms2_data.py
+requirements.txt
+assets/koenig_logo.png
+2. Configure Secrets
+Settings → Secrets and variables → Actions → New repository secret
 
-- **📥 Manual File Upload** - Upload Excel files directly
-- **🤖 Auto Download** - Automatically fetch data from RMS2 (requires ChromeDriver)
-- **📊 Comprehensive Reports** - 4-sheet Excel with Growth Comparison, High Growth, Summary, Exceptions
-- **🎨 Koenig Branding** - Professional interface with company colors
-- **✅ Fixed High Growth Filter** - Correctly identifies clients: Previous ≤ $5K, Current ≥ $50K
+Secret Name	Value
+RMS_USERNAME	admin
+RMS_PASSWORD	koenig2024
+3. Enable Permissions
+Settings → Actions → General → Workflow permissions
 
-## 🚀 Quick Start
+✅ Read and write permissions
+✅ Allow GitHub Actions to create and approve pull requests
+4. Test Workflow
+Actions → Download RMS2 Data → Run workflow
 
-### Local Setup
+Wait ~2-3 minutes, then check data/ folder for downloaded files.
 
-1. **Clone the repository**
-```bash
-git clone <your-repo-url>
-cd rms2_dashboard
-```
+5. Deploy Streamlit
+Deploy streamlit_app.py to Streamlit Cloud (no additional config needed!)
 
-2. **Install dependencies**
-```bash
-pip install -r requirements_streamlit.txt
-```
+📖 Documentation
+QUICK_START.md - Fast setup guide with comparisons
+GITHUB_ACTIONS_SETUP.md - Complete workflow documentation
+Inline comments - All code is well-documented
+🎮 Usage
+Automatic (No Action Needed)
+Workflow runs on 1st of every month
+Downloads fresh data from RMS2
+Commits files to data/ folder
+Team can generate reports anytime
+Manual Download (On-Demand)
+Go to Actions tab
+Click Download RMS2 Data
+Click Run workflow
+Files downloaded in ~2-3 minutes
+Generate Reports
+Open Streamlit app
+Login: admin / koenig2024
+Select "🤖 Use Auto-Downloaded Data"
+Click "Generate Client Growth Report"
+Download Excel file
+Manual Upload (Backup)
+Select "📥 Manual Upload" mode
+Upload RCB_24months.xlsx
+Upload RCB_12months.xlsx
+Generate report
+🔧 Technical Details
+GitHub Actions Workflow
+Trigger:
 
-3. **Run the dashboard**
-```bash
-streamlit run streamlit_app.py
-```
+Copyschedule:
+  - cron: '0 6 1 * *'  # Monthly on 1st at 6 AM UTC
+workflow_dispatch:       # Manual trigger
+Key Steps:
 
-4. **Open browser**
-```
-http://localhost:8501
-```
+Install Playwright + Chromium
+Run download_rms2_data.py
+Verify files exist and have valid size
+Commit and push to repository
+Environment Variables:
 
-### Using the Dashboard
+RMS_USERNAME (from secrets)
+RMS_PASSWORD (from secrets)
+RMS_LOGIN_URL: https://rms2.koenig-solutions.com
+RCB_BASE_URL: https://rms2.koenig-solutions.com/RCB
+Download Script Logic
+Two-Step Download Process:
 
-#### Option 1: Manual Upload (Recommended)
-1. Download `RCB_24months.xlsx` and `RCB_12months.xlsx` from RMS2
-2. Upload both files in the dashboard
-3. Click "Generate Client Growth Report"
-4. Download your Excel report
+Copy# Step 1: Select period
+page.select_option("select", "24")
 
-#### Option 2: Auto Download (Advanced)
-1. Install ChromeDriver: `brew install chromedriver`
-2. Create `.env` file with RMS2 credentials:
-```
-RMS_USERNAME=your.email@koenig-solutions.com
-RMS_PASSWORD=your_password
-RMS_LOGIN_URL=https://rms2.koenig-solutions.com
-RCB_BASE_URL=https://rms2.koenig-solutions.com/RCB
-INR_TO_USD_RATE=84
-```
-3. Click "Download Data & Generate Report"
+# Step 2: Click Display button
+page.click("button.ui.mini.button:has-text('Display')")
+page.wait_for_timeout(3000)
 
-## 📦 Dependencies
+# Step 3: Click Export button
+with page.expect_download():
+    page.click("button.ui.mini.button:has-text('Export to excel')")
+Why two steps? RMS2 requires clicking "Display" first to load the data, then "Export" to trigger the download.
 
-- streamlit
-- pandas
-- openpyxl
-- python-dotenv (for auto-download)
-- selenium (for auto-download)
+Streamlit App Features
+Mode Detection:
 
-## 🌐 Deploy to Streamlit Cloud
+Copyauto_files_exist = (
+    Path('data/RCB_24months.xlsx').exists() and 
+    Path('data/RCB_12months.xlsx').exists()
+)
+Data Freshness:
 
-1. **Push to GitHub**
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
-```
+Copylast_update = datetime.fromtimestamp(
+    file_path.stat().st_mtime
+)
+🛠️ Troubleshooting
+Workflow Not Running
+✅ Check file path: .github/workflows/download-rms2-data.yml
+✅ Verify GitHub Actions enabled in Settings
+✅ Try manual trigger first
+Login Fails
+✅ Verify secrets: RMS_USERNAME, RMS_PASSWORD
+✅ Check RMS2 website is accessible
+✅ Review login_error.png in failed run artifacts
+Download Timeout
+✅ Verify two-step process implemented correctly
+✅ Check button selectors in workflow logs
+✅ Review download_*_error.png screenshots
+Git Push Fails
+✅ Enable write permissions in Settings → Actions
+✅ Ensure "Allow GitHub Actions to create PRs" is checked
+Files Not in Data Folder
+✅ Check Actions tab for workflow status
+✅ Review workflow logs for errors
+✅ Verify files committed in latest commit
+📊 Dependencies
+Python Packages
+streamlit          # Dashboard framework
+pandas             # Data processing
+openpyxl           # Excel file handling
+python-dotenv      # Environment variables
+playwright         # Browser automation
+System Requirements
+Python 3.11+
+Chromium browser (auto-installed by Playwright)
+🔒 Security
+Credentials
+✅ Stored as encrypted GitHub secrets
+✅ Never visible in logs or code
+✅ Only accessible during workflow execution
+Access Control
+✅ Streamlit login required: admin / koenig2024
+✅ Repository access controls apply
+✅ GitHub Actions audit logs available
+📅 Maintenance
+Monthly Tasks
+✅ Automatic: Workflow downloads data (no action needed)
+Periodic Tasks
+🔄 Quarterly: Review workflow logs for any issues
+🔄 Yearly: Rotate RMS2 credentials (update secrets)
+Monitoring
+Check Actions tab for workflow status
+Review data/ folder for latest files
+Monitor Streamlit app for any errors
+🎯 Benefits Over Previous Approach
+Aspect	Old (Streamlit Auto-Download)	New (GitHub Actions)
+Reliability	❌ Timeout errors	✅ Robust runners
+Browser Support	❌ ChromeDriver issues	✅ Full Playwright support
+Debugging	❌ Hard to debug	✅ Detailed logs
+Automation	❌ On-demand only	✅ Scheduled + on-demand
+Maintenance	❌ Complex code	✅ Simple, clean
+Resources	❌ Browser in cloud	✅ Efficient
+Two-step Download	❌ Not implemented	✅ Correctly implemented
+📝 Version History
+v2.0 (Current) - GitHub Actions Integration
+✅ Automated monthly downloads via GitHub Actions
+✅ Two-step download process (Display → Export)
+✅ Dual mode: Auto-downloaded + Manual upload
+✅ Data freshness indicators
+✅ Improved reliability and maintainability
+v1.2 - Streamlit Cloud Attempts
+⚠️ Browser automation in Streamlit Cloud
+⚠️ Multiple timeout and selector issues
+⚠️ Complex deployment requirements
+v1.1 - Koenig Branding
+✅ Blue theme (#0099cc)
+✅ Logo integration
+✅ Clean UI polish
+v1.0 - Initial Release
+✅ Fixed High Growth filter bug
+✅ USD conversion and formatting
+✅ 4-sheet Excel output
+🤝 Support
+Need help?
 
-2. **Deploy on Streamlit Cloud**
-- Go to https://share.streamlit.io/
-- Connect your GitHub repository
-- Select `streamlit_app.py` as main file
-- Add secrets (for auto-download):
-  - Go to Settings > Secrets
-  - Add your RMS2 credentials
+Check QUICK_START.md for setup guidance
+Review GITHUB_ACTIONS_SETUP.md for detailed docs
+Check Actions tab for workflow logs
+Review error screenshots in failed run artifacts
+📄 License
+Internal use - Koenig Solutions
 
-3. **Access your app**
-- Your app will be live at: `https://your-app-name.streamlit.app`
+✨ Credits
+Developed for Koenig Solutions
 
-## 📊 Report Structure
+Architecture:
 
-### Sheet 1: Growth Comparison
-- All clients with clean data
-- Sorted by Growth_USD descending
-- Includes Previous/Current revenue in USD and INR
-
-### Sheet 2: High Growth 5K-50K USD
-- Clients who crossed $50K threshold
-- Filter: Previous_12M_USD ≤ $5,000 AND Current_12M_USD ≥ $50,000
-- Sorted by Growth_% descending
-
-### Sheet 3: Summary
-- Total clients analyzed
-- High growth count
-- Exceptions count
-- Biggest mover statistics
-
-### Sheet 4: Exceptions
-- Clients with negative revenue values
-- Data quality issues identified
-
-## 🔧 Configuration
-
-### Currency Conversion
-Default: 1 USD = 84 INR
-
-To change, update `.env`:
-```
-INR_TO_USD_RATE=85
-```
-
-### High Growth Threshold
-Current filter: Previous ≤ $5K, Current ≥ $50K
-
-To modify, edit `process_report.py` lines 104-107.
-
-## 🐛 Troubleshooting
-
-**File upload not working?**
-- Check file format is .xlsx
-- File size should be < 200MB
-
-**Auto-download fails?**
-- Ensure ChromeDriver is installed
-- Verify credentials in `.env`
-- Try manual upload as fallback
-
-**Report generation error?**
-- Check data files have required columns (CorporateID, TotalNR1, etc.)
-- Verify Excel files are not corrupted
-
-## 📝 License
-
-Proprietary - Koenig Solutions
-
-## 👥 Support
-
-For issues or questions, contact IT Support.
+GitHub Actions for automation
+Playwright for browser control
+Streamlit for dashboard UI
+Pandas for data processing
+Happy Reporting! 📊

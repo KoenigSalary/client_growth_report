@@ -59,13 +59,6 @@ st.markdown("""
         border-radius: 4px;
         margin: 1rem 0;
     }
-    .error-box {
-        padding: 1rem;
-        background-color: #ffebee;
-        border-left: 4px solid #f44336;
-        border-radius: 4px;
-        margin: 1rem 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,7 +133,7 @@ with st.sidebar:
     
     option = st.radio(
         "Select Mode:",
-        ["📥 Manual Upload", "🤖 Auto Download (Local Only)"],
+        ["📥 Manual Upload", "🤖 Auto Download (Requires ChromeDriver)"],
         index=0
     )
     
@@ -270,23 +263,12 @@ if option == "📥 Manual Upload":
 else:  # Auto Download mode
     st.header("🤖 Automatic Data Download")
     
-    # Cloud warning
-    st.markdown("""
-    <div class="error-box">
-    <strong>🚫 Auto Download does NOT work on Streamlit Cloud!</strong><br><br>
-    This feature requires Chrome/ChromeDriver which are not available in cloud environments.
-    <br><br>
-    <strong>✅ Use "Manual Upload" mode instead for cloud deployment.</strong>
-    </div>
-    """, unsafe_allow_html=True)
-    
     st.markdown("""
     <div class="warning-box">
-    <strong>⚠️ Requirements (Local Computer Only):</strong><br>
+    <strong>⚠️ Requirements:</strong><br>
     - Chrome browser installed<br>
     - ChromeDriver installed<br>
-    - RMS2 credentials configured in Streamlit secrets<br>
-    - Running on your local machine (not cloud)
+    - RMS2 credentials in .env file
     </div>
     """, unsafe_allow_html=True)
     
@@ -310,25 +292,7 @@ else:  # Auto Download mode
                 
                 if not success:
                     st.error(f"❌ {message}")
-                    
-                    # Check if it's ChromeDriver error
-                    if "ChromeDriver" in str(message) or "Chrome" in str(message) or "127" in str(message):
-                        st.markdown("""
-                        <div class="error-box">
-                        <strong>🚫 Chrome/ChromeDriver Not Available</strong><br><br>
-                        
-                        <strong>If you're on Streamlit Cloud:</strong><br>
-                        Auto Download doesn't work on cloud. Use <strong>Manual Upload</strong> instead.
-                        <br><br>
-                        
-                        <strong>If you're running locally:</strong><br>
-                        1. Install Chrome browser<br>
-                        2. Install ChromeDriver: <code>pip install webdriver-manager</code><br>
-                        3. Or use <strong>Manual Upload</strong> (easier!)
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.info("💡 Try using Manual Upload mode instead.")
+                    st.info("💡 Try using Manual Upload mode instead.")
                 else:
                     st.success(f"✅ {message}")
                     
@@ -360,7 +324,7 @@ else:  # Auto Download mode
                     st.rerun()
                     
             except ImportError:
-                st.error("❌ ChromeDriver module not found. Please use Manual Upload mode.")
+                st.error("❌ ChromeDriver not installed. Please use Manual Upload mode.")
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
                 with st.expander("Show error details"):

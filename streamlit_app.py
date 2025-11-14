@@ -83,7 +83,7 @@ with col2:
 st.markdown("---")
 
 # Login credentials
-LOGIN_USERNAME = "Monika.Chopra"
+LOGIN_USERNAME = "monika.chopra@koenig-solutions.com"
 LOGIN_PASSWORD = "manyamey"
 
 # Initialize session state

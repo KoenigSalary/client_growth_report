@@ -161,6 +161,45 @@ with st.sidebar:
         st.session_state.authenticated = False
         st.rerun()
 
+    # Add after the "About" section in sidebar
+    st.markdown("---")
+    st.markdown("### 🤖 Auto-Download Control")
+
+    # Show data freshness if files exist
+    if auto_files_exist:
+        last_update_24m = datetime.fromtimestamp(Path('data/RCB_24months.xlsx').stat().st_mtime)
+        last_update_12m = datetime.fromtimestamp(Path('data/RCB_12months.xlsx').stat().st_mtime)
+        last_update = max(last_update_24m, last_update_12m)
+    
+        hours_ago = (datetime.now() - last_update).total_seconds() / 3600
+    
+        if hours_ago < 24:
+            st.success(f"✅ Data: {hours_ago:.1f}h ago")
+        elif hours_ago < 168:
+            st.info(f"📊 Data: {hours_ago/24:.1f}d ago")
+        else:
+            st.warning(f"⚠️ Data: {hours_ago/24:.1f}d old")
+
+    # Auto-run trigger button
+    if st.button("🔄 Run Auto-Download Now", key="trigger_auto_download"):
+        st.info("""
+        **📋 To trigger data download:**
+    
+        1. Click the button below to open GitHub Actions
+        2. Click "Run workflow" (green button)
+        3. Confirm by clicking "Run workflow" again
+        4. Wait 2-3 minutes for completion
+        5. Refresh this page to use new data
+        """)
+    
+        st.link_button(
+            "🚀 Open GitHub Actions",
+            "https://github.com/KoenigSalary/client_growth_report/actions/workflows/download-rms2-data.yml",
+            use_container_width=True
+        )
+    
+        st.markdown("**Current workflow status:**")
+        st.markdown("[View latest runs →](https://github.com/KoenigSalary/client_growth_report/actions)")
 
 def show_dataframe_info(df, file_name):
     """Show diagnostic information about a dataframe"""
@@ -170,7 +209,6 @@ def show_dataframe_info(df, file_name):
     
     with st.expander(f"Show first 5 rows of {file_name}"):
         st.dataframe(df.head())
-
 
 def generate_report_with_diagnostics(file_24m_path, file_12m_path, source="manual"):
     """Generate report with detailed diagnostics"""

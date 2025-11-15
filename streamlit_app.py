@@ -201,6 +201,29 @@ with st.sidebar:
         st.markdown("**Current workflow status:**")
         st.markdown("[View latest runs →](https://github.com/KoenigSalary/client_growth_report/actions)")
 
+    # Add to sidebar for testing
+    if st.button("📧 Test Email", key="test_email"):
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+        
+            sender = st.secrets.get("SMTP_EMAIL", "")
+            password = st.secrets.get("SMTP_PASSWORD", "")
+        
+            msg = MIMEText("Test email from Streamlit app!")
+            msg['Subject'] = 'Test Email - Client Growth Report'
+            msg['From'] = sender
+            msg['To'] = sender
+        
+            with smtplib.SMTP('smtp.office365.com', 587) as server:
+                server.starttls()
+                server.login(sender, password)
+                server.send_message(msg)
+        
+            st.success("✅ Test email sent successfully!")
+        except Exception as e:
+            st.error(f"❌ Email test failed: {str(e)}")
+
 def show_dataframe_info(df, file_name):
     """Show diagnostic information about a dataframe"""
     st.write(f"**{file_name} Information:**")

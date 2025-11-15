@@ -1,6 +1,6 @@
 """
-Client Growth Report - Streamlit Dashboard WITH FULL AUTOMATION
-Complete one-click solution with GitHub API integration and email notifications
+Client Growth Report - Streamlit Dashboard WITH DIAGNOSTICS
+This version shows detailed error information to help debug issues
 """
 
 import streamlit as st
@@ -10,12 +10,6 @@ from pathlib import Path
 from datetime import datetime
 import time
 import traceback
-import requests
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 
 # Page configuration
 st.set_page_config(
@@ -27,7 +21,7 @@ st.set_page_config(
 
 # Custom CSS for Koenig branding
 st.markdown("""
-
+<style>
     .main {
         background-color: #f5f7fa;
     }
@@ -66,128 +60,27 @@ st.markdown("""
         border-radius: 4px;
         margin: 1rem 0;
     }
-    .automation-progress {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    .data-update-badge {
+        background-color: #0099cc;
         color: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        margin: 1rem 0;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.85rem;
+        display: inline-block;
+        margin-top: 0.5rem;
     }
-
+</style>
 """, unsafe_allow_html=True)
 
-# GitHub API Functions
-def trigger_github_workflow():
-    """Trigger GitHub Actions workflow via API"""
-    try:
-        url = "https://api.github.com/repos/KoenigSalary/client_growth_report/actions/workflows/download-rms2-data.yml/dispatches"
-        token = st.secrets.get("GITHUB_TOKEN", "")
-        
-        if not token:
-            st.error("❌ GITHUB_TOKEN not configured in Streamlit secrets")
-            return False
-        
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-        data = {"ref": "main"}
-        
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        return response.status_code == 204
-        
-    except Exception as e:
-        st.error(f"❌ Error triggering workflow: {str(e)}")
-        return False
+# Header with Koenig branding
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.title("📊 Client Growth Report")
+    st.markdown("**Powered by Koenig Solutions**")
+with col2:
+    st.markdown("### ")
 
-def check_workflow_status():
-    """Check if workflow completed successfully"""
-    try:
-        url = "https://api.github.com/repos/KoenigSalary/client_growth_report/actions/runs"
-        token = st.secrets.get("GITHUB_TOKEN", "")
-        
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-        
-        response = requests.get(url, headers=headers, params={"per_page": 1}, timeout=30)
-        
-        if response.status_code == 200:
-            runs = response.json().get("workflow_runs", [])
-            if runs:
-                latest_run = runs[0]
-                return latest_run.get("status"), latest_run.get("conclusion"), latest_run.get("html_url")
-        
-        return None, None, None
-        
-    except Exception as e:
-        st.warning(f"⚠️ Error checking workflow status: {str(e)}")
-        return None, None, None
-
-def send_email_report(report_file_path, recipient_emails):
-    """Send email with report attachment"""
-    try:
-        sender_email = st.secrets.get("SMTP_EMAIL", "")
-        sender_password = st.secrets.get("SMTP_PASSWORD", "")
-        smtp_server = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(st.secrets.get("SMTP_PORT", 587))
-        
-        if not sender_email or not sender_password:
-            st.warning("⚠️ Email credentials not configured in Streamlit secrets")
-            return False
-        
-        msg = MIMEMultipart()
-        msg['From'] = sender_email
-        msg['To'] = ", ".join(recipient_emails)
-        msg['Subject'] = f"Client Growth Report - {datetime.now().strftime('%Y-%m-%d')}"
-        
-        body = f"""
-Hi Team,
-
-Please find attached the Client Growth Report generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
-
-Report Summary:
-- Data Period: Previous 12M vs Current 12M
-- Exchange Rate: 1 USD = 84 INR
-- High Growth Filter: Previous ≤$5K, Current ≥$50K
-
-The report includes:
-1. Growth Comparison (all clients)
-2. High Growth 5K-50K USD (filtered results)
-3. Summary statistics
-4. Exception handling details
-
-Best regards,
-Koenig Solutions Automated Report System
-        """
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Attach Excel file
-        with open(report_file_path, "rb") as attachment:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(attachment.read())
-        
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename= {Path(report_file_path).name}')
-        msg.attach(part)
-        
-        # Send email
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        text = msg.as_string()
-        server.sendmail(sender_email, recipient_emails, text)
-        server.quit()
-        
-        return True
-        
-    except Exception as e:
-        st.error(f"❌ Email sending failed: {str(e)}")
-        return False
+st.markdown("---")
 
 # Login credentials
 LOGIN_USERNAME = "monika.chopra"
@@ -199,7 +92,7 @@ if 'authenticated' not in st.session_state:
 
 # ===== LOGIN PAGE =====
 if not st.session_state.authenticated:
-    st.markdown("", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -228,16 +121,6 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ===== MAIN APPLICATION =====
-
-# Header with Koenig branding
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.title("📊 Client Growth Report")
-    st.markdown("**Powered by Koenig Solutions**")
-with col2:
-    st.markdown("### ")
-
-st.markdown("---")
 
 # Sidebar
 with st.sidebar:
@@ -274,175 +157,270 @@ with st.sidebar:
     """)
     
     st.markdown("---")
-    st.markdown("### 🤖 Full Automation Control")
-    
+    if st.button("🚪 Logout", key="logout"):
+        st.session_state.authenticated = False
+        st.rerun()
+
+    # Add after the "About" section in sidebar
+    st.markdown("---")
+    st.markdown("### 🤖 Auto-Download Control")
+
     # Show data freshness if files exist
     if auto_files_exist:
         last_update_24m = datetime.fromtimestamp(Path('data/RCB_24months.xlsx').stat().st_mtime)
         last_update_12m = datetime.fromtimestamp(Path('data/RCB_12months.xlsx').stat().st_mtime)
         last_update = max(last_update_24m, last_update_12m)
+    
         hours_ago = (datetime.now() - last_update).total_seconds() / 3600
-        
+    
         if hours_ago < 24:
             st.success(f"✅ Data: {hours_ago:.1f}h ago")
         elif hours_ago < 168:
             st.info(f"📊 Data: {hours_ago/24:.1f}d ago")
         else:
             st.warning(f"⚠️ Data: {hours_ago/24:.1f}d old")
+
+    # Auto-run trigger button
+    if st.button("🔄 Run Auto-Download Now", key="trigger_auto_download"):
+        st.info("""
+        **📋 To trigger data download:**
     
-    # ONE-CLICK FULL AUTOMATION BUTTON
-    if st.button("🚀 Run Full Automation", key="full_auto_trigger", use_container_width=True):
-        progress_container = st.empty()
-        status_container = st.empty()
+        1. Click the button below to open GitHub Actions
+        2. Click "Run workflow" (green button)
+        3. Confirm by clicking "Run workflow" again
+        4. Wait 2-3 minutes for completion
+        5. Refresh this page to use new data
+        """)
+    
+        st.link_button(
+            "🚀 Open GitHub Actions",
+            "https://github.com/KoenigSalary/client_growth_report/actions/workflows/download-rms2-data.yml",
+            use_container_width=True
+        )
+    
+        st.markdown("**Current workflow status:**")
+        st.markdown("[View latest runs →](https://github.com/KoenigSalary/client_growth_report/actions)")
+
+def show_dataframe_info(df, file_name):
+    """Show diagnostic information about a dataframe"""
+    st.write(f"**{file_name} Information:**")
+    st.write(f"- Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+    st.write(f"- Columns: {', '.join(df.columns.tolist())}")
+    
+    with st.expander(f"Show first 5 rows of {file_name}"):
+        st.dataframe(df.head())
+
+def generate_report_with_diagnostics(file_24m_path, file_12m_path, source="manual"):
+    """Generate report with detailed diagnostics"""
+    
+    st.subheader("📊 Report Generation Progress")
+    
+    try:
+        # Step 1: Read files
+        st.write("**Step 1: Reading files...**")
         
-        with progress_container.container():
-            st.markdown('', unsafe_allow_html=True)
-            st.markdown("### 🔄 Full Automation in Progress...")
-            progress_bar = st.progress(0)
-            st.markdown('', unsafe_allow_html=True)
+        try:
+            df_24m = pd.read_excel(file_24m_path)
+            st.success(f"✅ Successfully read 24-month file")
+            show_dataframe_info(df_24m, "24-Month Data")
+        except Exception as e:
+            st.error(f"❌ Error reading 24-month file: {str(e)}")
+            st.code(traceback.format_exc())
+            return False
+        
+        try:
+            df_12m = pd.read_excel(file_12m_path)
+            st.success(f"✅ Successfully read 12-month file")
+            show_dataframe_info(df_12m, "12-Month Data")
+        except Exception as e:
+            st.error(f"❌ Error reading 12-month file: {str(e)}")
+            st.code(traceback.format_exc())
+            return False
+        
+        st.markdown("---")
+        
+        # Step 2: Check required columns
+        st.write("**Step 2: Checking required columns...**")
+        
+        required_columns_24m = ['CorporateID', 'CorporateName', 'TotalNR1']
+        required_columns_12m = ['CorporateID', 'TotalNR1']
+        
+        missing_24m = [col for col in required_columns_24m if col not in df_24m.columns]
+        missing_12m = [col for col in required_columns_12m if col not in df_12m.columns]
+        
+        if missing_24m:
+            st.error(f"❌ Missing columns in 24-month file: {', '.join(missing_24m)}")
+            st.write("**Available columns:**", ', '.join(df_24m.columns.tolist()))
+            return False
+        else:
+            st.success("✅ All required columns found in 24-month file")
+        
+        if missing_12m:
+            st.error(f"❌ Missing columns in 12-month file: {', '.join(missing_12m)}")
+            st.write("**Available columns:**", ', '.join(df_12m.columns.tolist()))
+            return False
+        else:
+            st.success("✅ All required columns found in 12-month file")
+        
+        st.markdown("---")
+        
+        # Step 3: Process report
+        st.write("**Step 3: Processing report...**")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            status_text.text("⚙️ Processing data and calculating growth...")
+            progress_bar.progress(40)
             
-            # Step 1: Trigger workflow
-            status_container.info("📡 Step 1/5: Triggering GitHub Actions workflow...")
-            progress_bar.progress(10)
+            from process_report import process_growth_report
             
-            if trigger_github_workflow():
-                status_container.success("✅ Workflow triggered successfully!")
-                time.sleep(2)
-                
-                # Step 2: Wait for download
-                status_container.info("⬇️ Step 2/5: Downloading data from RMS2... (2-3 minutes)")
-                progress_bar.progress(30)
-                
-                # Poll workflow status
-                max_wait = 300  # 5 minutes max
-                waited = 0
-                workflow_url = None
-                
-                while waited < max_wait:
-                    status, conclusion, url = check_workflow_status()
-                    workflow_url = url
-                    
-                    if status == "completed":
-                        if conclusion == "success":
-                            status_container.success("✅ Data downloaded successfully!")
-                            break
-                        else:
-                            status_container.error("❌ Download failed. Check GitHub Actions logs.")
-                            if workflow_url:
-                                st.link_button("View Error Details", workflow_url)
-                            st.stop()
-                    
-                    time.sleep(15)
-                    waited += 15
-                    progress_bar.progress(30 + int((waited / max_wait) * 30))
-                
-                if waited >= max_wait:
-                    status_container.warning("⚠️ Download taking longer than expected. Check workflow status.")
-                    if workflow_url:
-                        st.link_button("Check Workflow Status", workflow_url)
-                
-                progress_bar.progress(60)
-                time.sleep(2)
-                
-                # Step 3: Validate data
-                status_container.info("✅ Step 3/5: Validating downloaded data...")
-                progress_bar.progress(70)
-                
-                # Force refresh of file existence check
-                st.rerun() if not (Path('data/RCB_24months.xlsx').exists() and Path('data/RCB_12months.xlsx').exists()) else None
-                
-                if Path('data/RCB_24months.xlsx').exists() and Path('data/RCB_12months.xlsx').exists():
-                    status_container.success("✅ Data validation passed!")
-                    time.sleep(1)
-                else:
-                    status_container.error("❌ Data files not found after download")
-                    st.stop()
-                
-                # Step 4: Generate report
-                status_container.info("📊 Step 4/5: Generating growth report...")
-                progress_bar.progress(80)
-                
-                # Auto-generate report with new data
-                try:
-                    from process_report import process_growth_report
-                    
-                    df_24m = pd.read_excel('data/RCB_24months.xlsx')
-                    df_12m = pd.read_excel('data/RCB_12months.xlsx')
-                    
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    output_dir = Path('generated_reports')
-                    output_dir.mkdir(exist_ok=True)
-                    output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
-                    
-                    result = process_growth_report(df_24m, df_12m, str(output_file))
-                    
-                    status_container.success("✅ Report generated successfully!")
-                    progress_bar.progress(90)
-                    time.sleep(1)
-                    
-                    # Step 5: Send email
-                    status_container.info("📧 Step 5/5: Sending email notification...")
-                    
-                    recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
-                    recipient_emails = [email.strip() for email in recipient_emails if email.strip()]
-                    
-                    if recipient_emails:
-                        if send_email_report(str(output_file), recipient_emails):
-                            status_container.success("✅ Email sent successfully!")
-                        else:
-                            status_container.warning("⚠️ Email failed, but report is ready for download")
-                    else:
-                        status_container.info("ℹ️ No email recipients configured. Skipping email.")
-                    
-                    progress_bar.progress(100)
-                    
-                    # Final success
-                    st.balloons()
-                    st.success(f"""
-                    ### 🎉 Full Automation Completed Successfully!
-                    
-                    ✅ Data downloaded from RMS2
-                    ✅ Data validated ({len(df_24m)} 24M records, {len(df_12m)} 12M records)
-                    ✅ Growth report generated
-                    ✅ Email notification sent (if configured)
-                    
-                    **Report Summary:**
-                    - Total clients analyzed: {result.get('total_clients', 'N/A')}
-                    - High growth clients: {result.get('high_growth_count', 'N/A')}
-                    - Average growth: {result.get('avg_growth', 0):.1f}%
-                    
-                    **Report file:** {output_file.name}
-                    """)
-                    
-                    # Download button
-                    with open(output_file, 'rb') as f:
-                        st.download_button(
-                            label="📥 Download Excel Report",
-                            data=f,
-                            file_name=output_file.name,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key='download_auto_generated'
-                        )
-                    
-                except Exception as e:
-                    status_container.error(f"❌ Report generation failed: {str(e)}")
-                    st.code(traceback.format_exc())
+            status_text.text("📊 Generating Excel report...")
+            progress_bar.progress(60)
             
-            else:
-                status_container.error("❌ Failed to trigger workflow. Check GITHUB_TOKEN secret.")
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_dir = Path('generated_reports')
+            output_dir.mkdir(exist_ok=True)
+            output_file = output_dir / f'Client_Growth_Report_{timestamp}.xlsx'
+            
+            result = process_growth_report(df_24m, df_12m, str(output_file))
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Report generated successfully!")
+            
+            st.markdown("---")
+            
+            # Display summary
+            st.markdown(f"""
+            <div class="success-box">
+            <h3>✅ Report Generated Successfully!</h3>
+            <p><strong>Summary:</strong></p>
+            <ul>
+                <li>Total clients analyzed: {result.get('total_clients', 'N/A')}</li>
+                <li>High growth clients (≤$5K → ≥$50K): {result.get('high_growth_count', 'N/A')}</li>
+                <li>Average growth: {result.get('avg_growth', 0):.1f}%</li>
+                <li>Report saved: <code>{output_file.name}</code></li>
+            </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Download button
+            with open(output_file, 'rb') as f:
+                st.download_button(
+                    label="📥 Download Excel Report",
+                    data=f,
+                    file_name=output_file.name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f'download_{source}'
+                )
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error during report generation: {str(e)}")
+            st.markdown("""
+            <div class="error-box">
+            <strong>🔍 Debug Information:</strong>
+            </div>
+            """, unsafe_allow_html=True)
+            st.code(traceback.format_exc())
+            return False
+        
+    except Exception as e:
+        st.error(f"❌ Unexpected error: {str(e)}")
+        st.code(traceback.format_exc())
+        return False
+
+
+# Main content area
+if option == "🤖 Use Auto-Downloaded Data":
+    st.header("🤖 Auto-Downloaded Data")
+    
+    file_24m_path = Path('data/RCB_24months.xlsx')
+    file_12m_path = Path('data/RCB_12months.xlsx')
+    
+    if file_24m_path.exists() and file_12m_path.exists():
+        last_update_24m = datetime.fromtimestamp(file_24m_path.stat().st_mtime)
+        last_update_12m = datetime.fromtimestamp(file_12m_path.stat().st_mtime)
+        last_update = max(last_update_24m, last_update_12m)
+        
+        st.markdown(f"""
+        <div class="success-box">
+        <strong>✅ Data files available</strong><br>
+        <span class="data-update-badge">Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}</span>
+        <ul style="margin-top: 0.5rem;">
+            <li>RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)</li>
+            <li>RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        if st.button("📊 Generate Client Growth Report", key='generate_auto'):
+            generate_report_with_diagnostics(file_24m_path, file_12m_path, "auto")
+    else:
+        st.warning("⚠️ Auto-downloaded data files not found. Please use Manual Upload mode.")
+
+else:  # Manual Upload
+    st.header("📥 Upload Data Files")
+    
+    st.markdown("""
+    <div class="info-box">
+    <strong>Instructions:</strong>
+    <ol>
+        <li>Download RCB_24months.xlsx and RCB_12months.xlsx from RMS2</li>
+        <li>Upload both files below</li>
+        <li>Click "Generate Report"</li>
+    </ol>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("24-Month Data")
+        file_24m = st.file_uploader(
+            "Upload RCB_24months.xlsx",
+            type=['xlsx'],
+            key='file_24m'
+        )
+        if file_24m:
+            st.success(f"✅ Uploaded: {file_24m.name} ({file_24m.size / 1024 / 1024:.1f} MB)")
+    
+    with col2:
+        st.subheader("12-Month Data")
+        file_12m = st.file_uploader(
+            "Upload RCB_12months.xlsx",
+            type=['xlsx'],
+            key='file_12m'
+        )
+        if file_12m:
+            st.success(f"✅ Uploaded: {file_12m.name} ({file_12m.size / 1024 / 1024:.1f} MB)")
     
     st.markdown("---")
-    if st.button("🚪 Logout", key="logout"):
-        st.session_state.authenticated = False
-        st.rerun()
-
-# Main content area (existing code continues...)
-# [Rest of your existing streamlit_app.py code for manual upload and report generation]
+    
+    if st.button("📊 Generate Client Growth Report", key='generate_manual', disabled=not (file_24m and file_12m)):
+        # Save uploaded files temporarily
+        data_dir = Path('data')
+        data_dir.mkdir(exist_ok=True)
+        
+        temp_24m = data_dir / 'temp_RCB_24months.xlsx'
+        with open(temp_24m, 'wb') as f:
+            f.write(file_24m.getbuffer())
+        
+        temp_12m = data_dir / 'temp_RCB_12months.xlsx'
+        with open(temp_12m, 'wb') as f:
+            f.write(file_12m.getbuffer())
+        
+        # Generate report with diagnostics
+        generate_report_with_diagnostics(temp_24m, temp_12m, "manual")
 
 # Footer
 st.markdown("---")
 st.markdown("""
-
-    Client Growth Report Generator v3.0 (Full Automation) | © 2024 Koenig Solutions
-
+<div style="text-align: center; color: #666; padding: 1rem;">
+    <small>Client Growth Report Generator v2.0 (Diagnostic Mode) | © 2024 Koenig Solutions</small>
+</div>
 """, unsafe_allow_html=True)

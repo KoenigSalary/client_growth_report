@@ -85,8 +85,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Login credentials
-LOGIN_USERNAME = "admin"
-LOGIN_PASSWORD = "koenig2024"
+RMS_USERNAME = "admin"
+RMS_PASSWORD = "koenig2024"
 
 # Initialize session state
 if 'authenticated' not in st.session_state:

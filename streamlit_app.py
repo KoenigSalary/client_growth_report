@@ -248,7 +248,7 @@ if not st.session_state.authenticated:
             submit = st.form_submit_button("🔓 Login")
             
             if submit:
-                if username == LOGIN_USERNAME and password == LOGIN_PASSWORD:
+                if username == RMS_USERNAME and password == RMS_PASSWORD:
                     st.session_state.authenticated = True
                     st.success("✅ Login successful! Redirecting...")
                     time.sleep(1)

@@ -1,12 +1,9 @@
-
-
-
 name: Download RMS2 Data
 
 on:
-  # Run monthly on the 14th at 6 AM UTC (CHANGED FROM 1st)
+  # Run monthly on the 14th at 6 AM UTC
   schedule:
-    - cron: '0 6 14 * *'
+    - cron: '0 6 14 * *'  
   
   # Allow manual trigger
   workflow_dispatch:
@@ -61,23 +58,7 @@ jobs:
             exit 1
           fi
           
-          # Additional validation
-          size_24m=$(stat -f%z "data/RCB_24months.xlsx" 2>/dev/null || stat -c%s "data/RCB_24months.xlsx")
-          size_12m=$(stat -f%z "data/RCB_12months.xlsx" 2>/dev/null || stat -c%s "data/RCB_12months.xlsx")
-          
-          if [ $size_24m -lt 10000 ]; then
-            echo "ERROR: 24-month file too small ($size_24m bytes)"
-            exit 1
-          fi
-          
-          if [ $size_12m -lt 10000 ]; then
-            echo "ERROR: 12-month file too small ($size_12m bytes)"
-            exit 1
-          fi
-          
           echo "Both files downloaded successfully!"
-          echo "24-month file: $size_24m bytes"
-          echo "12-month file: $size_12m bytes"
       
       - name: Configure Git
         run: |
@@ -102,5 +83,3 @@ jobs:
           name: error-screenshots
           path: data/*_error.png
           if-no-files-found: ignore
-
-

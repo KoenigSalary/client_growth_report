@@ -11,6 +11,8 @@ from datetime import datetime
 import time
 import requests
 import smtplib
+import ssl
+import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -87,13 +89,31 @@ h1 {
     unsafe_allow_html=True,
 )
 
-# Login credentials
-RMS_USERNAME = "admin"
-RMS_PASSWORD = "koenig2024"
+# ----------------- LOGIN / RESET SESSION STATE -----------------
 
-# Initialize session state
+# Single admin username
+RMS_USERNAME = "admin"
+
+# Session-backed password (can be changed via Forgot Password)
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
+
+if 'login_password' not in st.session_state:
+    # Default password; will be updated when reset via OTP
+    st.session_state.login_password = "koenig2024"
+
+if 'reset_stage' not in st.session_state:
+    # None      -> normal login
+    # "email"   -> ask for email
+    # "otp"     -> OTP input
+    # "new_pw"  -> new password
+    st.session_state.reset_stage = None
+
+if 'reset_email' not in st.session_state:
+    st.session_state.reset_email = None
+
+if 'otp' not in st.session_state:
+    st.session_state.otp = None
 
 # ===== HELPER FUNCTIONS =====
 
@@ -144,7 +164,7 @@ def check_workflow_status():
         
         return None, None
         
-    except Exception as e:
+    except Exception:
         return None, None
 
 def send_email_report(report_file_path, recipient_emails):
@@ -233,7 +253,48 @@ def generate_report_with_email(file_24m_path, file_12m_path, source="manual"):
     except Exception as e:
         return False, None, {"error": str(e)}
 
-# ===== LOGIN PAGE =====
+def send_reset_code_email(receiver_email, otp_code):
+    """
+    Send a password reset code using Outlook SMTP (same config as reports).
+    """
+    sender_email = st.secrets.get("SMTP_EMAIL", "")
+    sender_password = st.secrets.get("SMTP_PASSWORD", "")
+    smtp_server = st.secrets.get("SMTP_SERVER", "smtp.office365.com")
+    smtp_port = int(st.secrets.get("SMTP_PORT", 587))
+
+    if not sender_email or not sender_password:
+        return False, "SMTP credentials not configured in secrets"
+
+    subject = "Client Growth Report - Password Reset Code"
+    body = f"""
+Dear User,
+
+Your password reset code for the Client Growth Report dashboard is:
+
+    {otp_code}
+
+This code will be valid for a short time. If you did not request this reset, you can ignore this email.
+
+Regards,
+Koenig Solutions Automated Report System
+"""
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
+
+    context = ssl.create_default_context()
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls(context=context)
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, [receiver_email], msg.as_string())
+        return True, "Reset code sent successfully"
+    except Exception as e:
+        return False, str(e)
+
+# ===== LOGIN PAGE (WITH FORGOT PASSWORD) =====
 if not st.session_state.authenticated:
     st.markdown("", unsafe_allow_html=True)
     
@@ -243,24 +304,127 @@ if not st.session_state.authenticated:
         if os.path.exists(logo_path):
             st.image(logo_path, width=300)
         
-        st.markdown("### 🔐 Login Required")
-        
-        with st.form("login_form"):
-            username = st.text_input("Username", placeholder="Enter username")
-            password = st.text_input("Password", type="password", placeholder="Enter password")
-            submit = st.form_submit_button("🔓 Login")
-            
-            if submit:
-                if username == RMS_USERNAME and password == RMS_PASSWORD:
-                    st.session_state.authenticated = True
-                    st.success("✅ Login successful! Redirecting...")
-                    time.sleep(1)
+        # Decide what to show based on reset_stage
+        # None      -> normal login
+        # "email"   -> ask for email
+        # "otp"     -> OTP entry
+        # "new_pw"  -> new password entry
+
+        # --------- NORMAL LOGIN ---------
+        if st.session_state.reset_stage is None:
+            st.markdown("### 🔐 Login Required")
+
+            with st.form("login_form"):
+                username = st.text_input("Username", placeholder="Enter username")
+                password = st.text_input("Password", type="password", placeholder="Enter password")
+                submit = st.form_submit_button("🔓 Login")
+                
+                if submit:
+                    if username == RMS_USERNAME and password == st.session_state.login_password:
+                        st.session_state.authenticated = True
+                        st.success("✅ Login successful! Redirecting...")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid username or password. Please try again.")
+
+            if st.button("Forgot Password?", type="secondary"):
+                st.session_state.reset_stage = "email"
+                st.rerun()
+
+            st.markdown("---")
+
+        # --------- STEP 1: ENTER EMAIL ---------
+        elif st.session_state.reset_stage == "email":
+            st.markdown("### 🔄 Reset Password")
+            st.write("Enter your registered email address to receive a reset code.")
+
+            # Registered email (can be configured in secrets)
+            registered_email = st.secrets.get("RESET_EMAIL", st.secrets.get("SMTP_EMAIL", ""))
+
+            email_input = st.text_input("Registered email")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("Send Reset Code"):
+                    if not registered_email:
+                        st.error("Reset email not configured. Please contact admin.")
+                    elif email_input.strip().lower() != registered_email.strip().lower():
+                        st.error("This email is not registered for password reset.")
+                    else:
+                        otp_code = random.randint(100000, 999999)
+                        st.session_state.otp = otp_code
+                        st.session_state.reset_email = registered_email
+
+                        ok, msg = send_reset_code_email(registered_email, otp_code)
+                        if ok:
+                            st.success("✅ Reset code sent to your email.")
+                            st.session_state.reset_stage = "otp"
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to send email: {msg}")
+            with col_b:
+                if st.button("Back to Login"):
+                    st.session_state.reset_stage = None
                     st.rerun()
-                else:
-                    st.error("❌ Invalid username or password. Please try again.")
-        
-        st.markdown("---")
-    
+
+            st.markdown("---")
+
+        # --------- STEP 2: ENTER OTP ---------
+        elif st.session_state.reset_stage == "otp":
+            st.markdown("### 🔑 Verify Reset Code")
+            st.write(f"A 6-digit code has been sent to **{st.session_state.reset_email}**.")
+
+            otp_input = st.text_input("Enter the 6-digit code")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("Verify Code"):
+                    if otp_input.strip() == str(st.session_state.otp):
+                        st.success("✅ Code verified! Please set your new password.")
+                        st.session_state.reset_stage = "new_pw"
+                        st.rerun()
+                    else:
+                        st.error("Invalid code. Please try again.")
+            with col_b:
+                if st.button("Back"):
+                    st.session_state.reset_stage = "email"
+                    st.rerun()
+
+            st.markdown("---")
+
+        # --------- STEP 3: NEW PASSWORD ---------
+        elif st.session_state.reset_stage == "new_pw":
+            st.markdown("### 🔐 Set New Password")
+            st.write("Set a new password for the dashboard login.")
+
+            new_pass = st.text_input("New Password", type="password")
+            confirm_pass = st.text_input("Confirm New Password", type="password")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("Update Password"):
+                    if not new_pass or not confirm_pass:
+                        st.error("Please enter and confirm the new password.")
+                    elif new_pass != confirm_pass:
+                        st.error("Passwords do not match.")
+                    else:
+                        # Update password in session
+                        st.session_state.login_password = new_pass
+                        # Clear reset state
+                        st.session_state.otp = None
+                        st.session_state.reset_email = None
+                        st.session_state.reset_stage = None
+                        st.success("✅ Password updated successfully. Please login with your new password.")
+                        time.sleep(1)
+                        st.rerun()
+            with col_b:
+                if st.button("Cancel"):
+                    st.session_state.reset_stage = None
+                    st.rerun()
+
+            st.markdown("---")
+
     st.stop()
 
 # ===== MAIN APPLICATION =====
@@ -437,17 +601,17 @@ if st.session_state.get('run_full_automation', False):
             
             # Success message
             st.balloons()
-            st.markdown(f"""
-            
-            🎉 Automation Completed Successfully!
-            
-                ✅ Data downloaded from RMS2
-                ✅ Data validated
-                ✅ Report generated ({result.get('total_clients', 0)} clients)
-                ✅ Email sent to {len(recipient_emails)} recipient(s)
-            
-            
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+🎉 Automation Completed Successfully!
+
+- ✅ Data downloaded from RMS2  
+- ✅ Data validated  
+- ✅ Report generated (**{result.get('total_clients', 0)}** clients)  
+- ✅ Email sent to {len(recipient_emails)} recipient(s)
+""",
+                unsafe_allow_html=True,
+            )
             
             # Download button
             with open(report_file, 'rb') as f:
@@ -476,16 +640,16 @@ elif option == "🤖 Use Auto-Downloaded Data":
         last_update_12m = datetime.fromtimestamp(file_12m_path.stat().st_mtime)
         last_update = max(last_update_24m, last_update_12m)
         
-        st.markdown(f"""
-        
-        ✅ Data files available
-        Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}
-        
-            RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)
-            RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)
-        
-        
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f"""
+✅ Data files available  
+Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}
+
+- RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)  
+- RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)
+""",
+            unsafe_allow_html=True,
+        )
         
         st.markdown("---")
         
@@ -523,16 +687,16 @@ elif option == "🤖 Use Auto-Downloaded Data":
 else:  # Manual Upload
     st.header("📥 Manual Upload")
     
-    st.markdown("""
-    
-    Instructions:
-    
-        Download RCB_24months.xlsx and RCB_12months.xlsx from RMS2
-        Upload both files below
-        Click "Generate Report & Send Email"
-    
-    
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+Instructions:
+
+1. Download **RCB_24months.xlsx** and **RCB_12months.xlsx** from RMS2  
+2. Upload both files below  
+3. Click **"Generate Report & Send Email"**
+""",
+        unsafe_allow_html=True,
+    )
     
     col1, col2 = st.columns(2)
     
@@ -601,8 +765,11 @@ else:  # Manual Upload
 
 # Footer
 st.markdown("---")
-st.markdown("""
-
-    Client Growth Report Generator v2.0 | © 2025 Koenig Solutions
-
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+<div style="text-align:center; font-size:0.9rem; color:grey;">
+Client Growth Report Generator v2.0 | © 2025 Koenig Solutions
+</div>
+""",
+    unsafe_allow_html=True,
+)

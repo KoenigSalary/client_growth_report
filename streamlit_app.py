@@ -25,64 +25,67 @@ st.set_page_config(
 )
 
 # Custom CSS for Koenig branding
-st.markdown("""
-
-    .main {
-        background-color: #f5f7fa;
-    }
-    .stButton>button {
-        background: linear-gradient(135deg, #0099cc 0%, #003d5c 100%);
-        color: white;
-        font-weight: 600;
-        border: none;
-        padding: 0.5rem 2rem;
-        border-radius: 25px;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #007aa3 0%, #002d4c 100%);
-    }
-    h1 {
-        color: #0099cc;
-    }
-    .success-box {
-        padding: 1rem;
-        background-color: #e8f5e9;
-        border-left: 4px solid #4caf50;
-        border-radius: 4px;
-        margin: 1rem 0;
-    }
-    .info-box {
-        padding: 1rem;
-        background-color: #e3f2fd;
-        border-left: 4px solid #2196f3;
-        border-radius: 4px;
-        margin: 1rem 0;
-    }
-    .warning-box {
-        padding: 1rem;
-        background-color: #fff3e0;
-        border-left: 4px solid #ff9800;
-        border-radius: 4px;
-        margin: 1rem 0;
-    }
-    .error-box {
-        padding: 1rem;
-        background-color: #ffebee;
-        border-left: 4px solid #f44336;
-        border-radius: 4px;
-        margin: 1rem 0;
-    }
-    .data-update-badge {
-        background-color: #0099cc;
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 15px;
-        font-size: 0.85rem;
-        display: inline-block;
-        margin-top: 0.5rem;
-    }
-
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+<style>
+.main {
+    background-color: #f5f7fa;
+}
+.stButton>button {
+    background: linear-gradient(135deg, #0099cc 0%, #003d5c 100%);
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 0.5rem 2rem;
+    border-radius: 25px;
+}
+.stButton>button:hover {
+    background: linear-gradient(135deg, #007aa3 0%, #002d4c 100%);
+}
+h1 {
+    color: #0099cc;
+}
+.success-box {
+    padding: 1rem;
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+.info-box {
+    padding: 1rem;
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+.warning-box {
+    padding: 1rem;
+    background-color: #fff3e0;
+    border-left: 4px solid #ff9800;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+.error-box {
+    padding: 1rem;
+    background-color: #ffebee;
+    border-left: 4px solid #f44336;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+.data-update-badge {
+    background-color: #0099cc;
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    display: inline-block;
+    margin-top: 0.5rem;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 # Login credentials
 RMS_USERNAME = "admin"

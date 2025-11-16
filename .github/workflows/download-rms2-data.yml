@@ -1,12 +1,15 @@
 name: Download RMS2 Data
 
 on:
-  # Run monthly on the 14th at 6 AM UTC (CHANGED FROM 1st)
+  # Run monthly on the 14th at 6 AM UTC
   schedule:
     - cron: '0 6 14 * *'
   
   # Allow manual trigger
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   download-data:
@@ -15,7 +18,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+        with:
+          persist-credentials: true
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -78,7 +83,7 @@ jobs:
       
       - name: Upload error screenshots (if any)
         if: failure()
-        uses: actions/upload-artifact@v4  # ← FIXED: Changed from v3 to v4
+        uses: actions/upload-artifact@v4
         with:
           name: error-screenshots
           path: data/*_error.png

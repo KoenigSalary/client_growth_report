@@ -603,6 +603,6 @@ else:  # Manual Upload
 st.markdown("---")
 st.markdown("""
 
-    Client Growth Report Generator v2.0 | © 2024 Koenig Solutions
+    Client Growth Report Generator v2.0 | © 2025 Koenig Solutions
 
 """, unsafe_allow_html=True)

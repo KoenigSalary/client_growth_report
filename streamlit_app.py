@@ -92,7 +92,8 @@ h1 {
 # ----------------- LOGIN / RESET SESSION STATE -----------------
 
 # Single admin username
-RMS_USERNAME = "admin"
+RMS_USERNAME = "monika.chopra@koenig-solutions.com"
+RMS_PASSWORD = "manyamey"
 
 # Session-backed password (can be changed via Forgot Password)
 if 'authenticated' not in st.session_state:

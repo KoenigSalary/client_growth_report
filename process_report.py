@@ -21,7 +21,7 @@ def process_growth_report(df_24m, df_12m, output_file):
     """
     
     # Configuration
-    INR_TO_USD = 84
+    INR_TO_USD = 86
     
     # Prepare 24-month data
     df_24m_prep = df_24m[[

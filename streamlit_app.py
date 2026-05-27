@@ -92,7 +92,7 @@ h1 {
 # ----------------- LOGIN / RESET STATE -----------------
 
 DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = "koenig2024"
+DEFAULT_PASSWORD = "koenig1993"
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False

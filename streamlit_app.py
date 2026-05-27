@@ -189,7 +189,7 @@ Please find attached the Client Growth Report generated on {datetime.now().strft
 
 Report Summary:
 - Data Period: Previous 12M vs Current 12M
-- Exchange Rate: 1 USD = 84 INR
+- Exchange Rate: 1 USD = 90 INR
 - High Growth Filter: Previous ≤$5K, Current ≥$50K
 
 Report includes 4 sheets:

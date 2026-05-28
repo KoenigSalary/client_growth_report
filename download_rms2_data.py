@@ -1,29 +1,19 @@
 """
 download_rms2_data.py
 
-Purpose:
-- Login to RMS2
-- Download latest RCB data for:
-  1. Last 24 months
-  2. Last 12 months
-- Save/overwrite:
-  data/RCB_24months.xlsx
-  data/RCB_12months.xlsx
+Downloads latest RMS2 RCB reports for:
+- Last 24 months -> data/RCB_24months.xlsx
+- Last 12 months -> data/RCB_12months.xlsx
 
-Designed for GitHub Actions.
+This version is based on the current RMS2 RCB page:
+- No From Date / To Date fields
+- Uses "Last Months" filter
+- Clicks Apply Filters
+- Clicks Export Excel
 
 Required GitHub Secrets:
 - RMS_USERNAME
 - RMS_PASSWORD
-
-Optional environment variables:
-- RMS_LOGIN_URL
-- RCB_BASE_URL
-
-Important:
-This script includes debug screenshots and flexible selectors.
-If RMS2 page fields/buttons differ, check GitHub Actions artifact screenshots/logs,
-then update the selector section below.
 """
 
 from __future__ import annotations
@@ -31,7 +21,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from datetime import date, timedelta
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
@@ -53,16 +42,6 @@ HEADLESS = os.getenv("HEADLESS", "true").lower() != "false"
 SLOW_MO = int(os.getenv("SLOW_MO", "0"))
 
 
-def format_date(d: date) -> str:
-    return d.strftime("%d-%b-%Y")
-
-
-def get_date_range(months: int) -> tuple[str, str]:
-    end = date.today()
-    start = end - timedelta(days=months * 30)
-    return format_date(start), format_date(end)
-
-
 def require_env() -> None:
     if not RMS_USERNAME:
         raise ValueError("RMS_USERNAME secret is missing.")
@@ -79,7 +58,22 @@ def screenshot(page: Page, name: str) -> None:
         print(f"Could not save screenshot {path}: {exc}")
 
 
-def click_first_available(page: Page, selectors: list[str], label: str, timeout: int = 5000) -> bool:
+def fill_first_available(page: Page, selectors: list[str], value: str, label: str, timeout: int = 7000) -> bool:
+    for selector in selectors:
+        try:
+            loc = page.locator(selector).first
+            loc.wait_for(state="visible", timeout=timeout)
+            loc.fill("")
+            loc.fill(value)
+            print(f"Filled {label}: {selector} = {value}")
+            return True
+        except Exception:
+            continue
+    print(f"Could not fill {label}. Tried: {selectors}")
+    return False
+
+
+def click_first_available(page: Page, selectors: list[str], label: str, timeout: int = 7000) -> bool:
     for selector in selectors:
         try:
             loc = page.locator(selector).first
@@ -91,46 +85,6 @@ def click_first_available(page: Page, selectors: list[str], label: str, timeout:
             continue
     print(f"Could not click {label}. Tried: {selectors}")
     return False
-
-
-def fill_first_available(page: Page, selectors: list[str], value: str, label: str, timeout: int = 5000) -> bool:
-    for selector in selectors:
-        try:
-            loc = page.locator(selector).first
-            loc.wait_for(state="visible", timeout=timeout)
-            loc.fill(value)
-            print(f"Filled {label}: {selector}")
-            return True
-        except Exception:
-            continue
-    print(f"Could not fill {label}. Tried: {selectors}")
-    return False
-
-
-def wait_for_download_and_save(page: Page, click_selectors: list[str], output_path: Path, label: str) -> None:
-    output_path.parent.mkdir(exist_ok=True)
-
-    with page.expect_download(timeout=120000) as download_info:
-        ok = click_first_available(page, click_selectors, f"{label} export/download", timeout=10000)
-        if not ok:
-            screenshot(page, f"{label}_export_button_not_found_error.png")
-            raise RuntimeError(f"Could not find export/download button for {label}.")
-
-    download = download_info.value
-    temp_path = download.path()
-
-    if not temp_path:
-        raise RuntimeError(f"Download failed for {label}. Suggested filename: {download.suggested_filename}")
-
-    shutil.copy(temp_path, output_path)
-    print(f"Saved {label}: {output_path} ({output_path.stat().st_size} bytes)")
-
-
-def select_or_fill_date(page: Page, selectors: list[str], value: str, label: str) -> None:
-    ok = fill_first_available(page, selectors, value, label, timeout=5000)
-    if not ok:
-        screenshot(page, f"{label}_not_found_error.png")
-        raise RuntimeError(f"Could not find date field: {label}")
 
 
 def login(page: Page) -> None:
@@ -172,22 +126,22 @@ def login(page: Page) -> None:
     ]
 
     if not fill_first_available(page, username_selectors, RMS_USERNAME, "username"):
-        raise RuntimeError("Could not find username field on RMS login page.")
+        raise RuntimeError("Could not find username field.")
 
     if not fill_first_available(page, password_selectors, RMS_PASSWORD, "password"):
-        raise RuntimeError("Could not find password field on RMS login page.")
+        raise RuntimeError("Could not find password field.")
 
     if not click_first_available(page, login_button_selectors, "login button"):
         screenshot(page, "login_button_not_found_error.png")
-        raise RuntimeError("Could not find login button on RMS login page.")
+        raise RuntimeError("Could not find login button.")
 
     page.wait_for_load_state("networkidle", timeout=60000)
     screenshot(page, "02_after_login.png")
 
-    body_text = page.locator("body").inner_text(timeout=10000)
+    body_text = page.locator("body").inner_text(timeout=15000)
     if re.search(r"invalid|incorrect|wrong|captcha|otp|verification|required", body_text, re.I):
         screenshot(page, "login_failed_or_extra_verification_error.png")
-        raise RuntimeError("Login may have failed or RMS requires OTP/CAPTCHA. Check screenshot artifact.")
+        raise RuntimeError("Login may have failed or RMS requires OTP/CAPTCHA.")
 
 
 def open_rcb_page(page: Page) -> None:
@@ -197,73 +151,98 @@ def open_rcb_page(page: Page) -> None:
     screenshot(page, "03_rcb_page.png")
 
 
-def download_rcb_report(page: Page, months: int, output_path: Path, label: str) -> None:
-    start_date, end_date = get_date_range(months)
-    print(f"Downloading {label}: {start_date} to {end_date}")
-
-    open_rcb_page(page)
-
-    from_date_selectors = [
-        "#txtDateFrom",
-        "#txtFromDate",
-        "#DateFrom",
-        "#FromDate",
-        "input[name='txtDateFrom']",
-        "input[name='txtFromDate']",
-        "input[name='DateFrom']",
-        "input[name='FromDate']",
-        "input[placeholder*='From' i]",
-        "input[aria-label*='From' i]",
+def set_last_months(page: Page, months: int, label: str) -> None:
+    """
+    Fill the 'Last Months' input shown on the RCB page.
+    """
+    last_months_selectors = [
+        # Best selector based on visible label
+        "input:near(:text('Last Months'))",
+        # Common possibilities
+        "input[name='lastMonths']",
+        "input[name='LastMonths']",
+        "input[name='LastMonth']",
+        "input[name='months']",
+        "input[name='Months']",
+        "#lastMonths",
+        "#LastMonths",
+        "#LastMonth",
+        "#months",
+        "#Months",
+        # Fallback: numeric/text field near filter section
+        "input[type='number']",
+        "input[placeholder*='month' i]",
+        "input[aria-label*='month' i]",
     ]
 
-    to_date_selectors = [
-        "#txtDateTo",
-        "#txtToDate",
-        "#DateTo",
-        "#ToDate",
-        "input[name='txtDateTo']",
-        "input[name='txtToDate']",
-        "input[name='DateTo']",
-        "input[name='ToDate']",
-        "input[placeholder*='To' i]",
-        "input[aria-label*='To' i]",
-    ]
+    if not fill_first_available(page, last_months_selectors, str(months), f"{label} Last Months"):
+        screenshot(page, f"{label}_last_months_not_found_error.png")
+        raise RuntimeError(f"Could not find Last Months field for {label}.")
 
-    search_button_selectors = [
+    screenshot(page, f"04_{label}_last_months_filled.png")
+
+
+def apply_filters(page: Page, label: str) -> None:
+    apply_selectors = [
+        "button:has-text('Apply Filters')",
+        "button:has-text('Apply')",
+        "input[value='Apply Filters']",
+        "input[value='Apply']",
+        "text=Apply Filters",
+        "#btnApplyFilters",
+        "#ApplyFilters",
         "#btnSearch",
         "#Search",
-        "button:has-text('Search')",
-        "input[value='Search']",
-        "text=Search",
     ]
 
-    export_button_selectors = [
-        "#btnExport",
-        "#btnExportToExcel",
-        "#ExportToExcel",
-        "#lnkExport",
-        "button:has-text('Export')",
+    if not click_first_available(page, apply_selectors, f"{label} Apply Filters"):
+        screenshot(page, f"{label}_apply_filters_not_found_error.png")
+        raise RuntimeError(f"Could not find Apply Filters button for {label}.")
+
+    page.wait_for_load_state("networkidle", timeout=60000)
+    page.wait_for_timeout(3000)
+    screenshot(page, f"05_{label}_after_apply_filters.png")
+
+
+def export_excel(page: Page, output_path: Path, label: str) -> None:
+    export_selectors = [
+        "button:has-text('Export Excel')",
+        "button:has-text('Excel (PPC)')",
         "button:has-text('Excel')",
+        "button:has-text('Export')",
+        "a:has-text('Export Excel')",
+        "a:has-text('Excel')",
         "input[value*='Export' i]",
         "input[value*='Excel' i]",
-        "a:has-text('Export')",
-        "a:has-text('Excel')",
-        "text=Export",
-        "text=Excel",
+        "#ExportExcel",
+        "#btnExportExcel",
+        "#ExportToExcel",
+        "#btnExportToExcel",
     ]
 
-    select_or_fill_date(page, from_date_selectors, start_date, f"{label}_from_date")
-    select_or_fill_date(page, to_date_selectors, end_date, f"{label}_to_date")
-    screenshot(page, f"04_{label}_dates_filled.png")
+    with page.expect_download(timeout=120000) as download_info:
+        if not click_first_available(page, export_selectors, f"{label} Export Excel", timeout=10000):
+            screenshot(page, f"{label}_export_excel_not_found_error.png")
+            raise RuntimeError(f"Could not find Export Excel button for {label}.")
 
-    clicked_search = click_first_available(page, search_button_selectors, f"{label} search", timeout=5000)
-    if clicked_search:
-        page.wait_for_load_state("networkidle", timeout=60000)
-        screenshot(page, f"05_{label}_after_search.png")
-    else:
-        print(f"No search button found for {label}; trying export directly.")
+    download = download_info.value
+    temp_path = download.path()
 
-    wait_for_download_and_save(page, export_button_selectors, output_path, label)
+    if not temp_path:
+        raise RuntimeError(f"Download failed for {label}. Suggested filename: {download.suggested_filename}")
+
+    output_path.parent.mkdir(exist_ok=True)
+    shutil.copy(temp_path, output_path)
+
+    print(f"Saved {label}: {output_path} ({output_path.stat().st_size} bytes)")
+
+
+def download_rcb_report(page: Page, months: int, output_path: Path, label: str) -> None:
+    print(f"Starting {label} download for Last Months = {months}")
+    open_rcb_page(page)
+    set_last_months(page, months, label)
+    apply_filters(page, label)
+    export_excel(page, output_path, label)
 
 
 def main() -> None:
@@ -277,8 +256,8 @@ def main() -> None:
 
         try:
             login(page)
-            download_rcb_report(page, months=24, output_path=FILE_24M, label="RCB_24months")
-            download_rcb_report(page, months=12, output_path=FILE_12M, label="RCB_12months")
+            download_rcb_report(page, 24, FILE_24M, "RCB_24months")
+            download_rcb_report(page, 12, FILE_12M, "RCB_12months")
         except Exception as exc:
             print(f"ERROR: {exc}")
             screenshot(page, "final_error.png")
@@ -287,7 +266,7 @@ def main() -> None:
             context.close()
             browser.close()
 
-    print("RMS2 download completed successfully.")
+    print("RMS2 RCB downloads completed successfully.")
     print(f"24M file: {FILE_24M}")
     print(f"12M file: {FILE_12M}")
 

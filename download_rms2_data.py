@@ -274,34 +274,77 @@ def apply_filters(page: Page, label: str) -> None:
 
 # ─── Export ──────────────────────────────────────────────────────────────────
 def export_excel(page: Page, output_path: Path, label: str) -> None:
+    """
+    Export Excel from RMS2 RCB page.
+    Tries a very wide range of selectors, then falls back to a diagnostic dump
+    so we can see what's actually on the page.
+    """
     export_selectors = [
-        # Most likely on RMS2 RCB
+        # ── Common RMS2 RCB labels ──────────────────────────────────────────
         "button:has-text('Export to excel')",
         "button:has-text('Export to Excel')",
-        "button.ui.mini.button:has-text('Export')",
         "button:has-text('Export Excel')",
+        "button:has-text('Excel Report')",
         "button:has-text('Excel (PPC)')",
+        "button:has-text('Excel (ePR)')",
+        "button:has-text('Download Excel')",
+        "button:has-text('Download')",
         "button:has-text('Excel')",
         "button:has-text('Export')",
+
+        # ── Semantic-UI variants ────────────────────────────────────────────
+        "button.ui.mini.button:has-text('Export')",
+        "button.ui.mini.button:has-text('Excel')",
+        "button.ui.button:has-text('Export')",
+        "button.ui.button:has-text('Excel')",
+        "button:has(i.file.excel.icon)",
+        "button:has(i.download.icon)",
+        "button:has(i.excel.icon)",
+        "button:has(i.file.icon)",
+
+        # ── Anchor tags styled as buttons ───────────────────────────────────
         "a:has-text('Export to excel')",
         "a:has-text('Export Excel')",
         "a:has-text('Excel')",
+        "a:has-text('Export')",
+        "a:has-text('Download')",
+        "a.ui.button:has-text('Excel')",
+        "a.ui.button:has-text('Export')",
+
+        # ── Input styled as button ──────────────────────────────────────────
         "input[value*='Export' i]",
         "input[value*='Excel' i]",
+        "input[value*='Download' i]",
+
+        # ── Common IDs ──────────────────────────────────────────────────────
         "#ExportExcel", "#btnExportExcel",
         "#ExportToExcel", "#btnExportToExcel",
+        "#btnExport", "#Export",
+        "#btnDownload", "#Download",
+        "#ExcelReport", "#btnExcelReport",
+
+        # ── XPath fallbacks ─────────────────────────────────────────────────
         "//button[contains(., 'Export')]",
+        "//button[contains(., 'Excel')]",
         "//a[contains(., 'Export')]",
+        "//a[contains(., 'Excel')]",
+        "//*[@title='Export to Excel' or @title='Export Excel' or @title='Download Excel']",
     ]
 
+    # First attempt with all selectors — but DON'T let the download timeout
+    # mask a button-not-found error.
     try:
         with page.expect_download(timeout=120000) as download_info:
             if not click_first_available(page, export_selectors,
-                                         f"{label} Export Excel", timeout=10000):
+                                         f"{label} Export Excel", timeout=8000):
+                # ── Diagnostic dump so we can see what's actually on the page
+                _dump_all_buttons(page, label)
                 screenshot(page, f"{label}_export_excel_not_found_error.png")
                 raise RuntimeError(f"Could not find Export Excel button for {label}.")
         download = download_info.value
     except Exception as e:
+        # Make sure we always dump buttons + screenshot on any failure here
+        _dump_all_buttons(page, label)
         screenshot(page, f"{label}_export_download_error.png")
         raise RuntimeError(f"Export download failed for {label}: {e}")
 
@@ -314,6 +357,39 @@ def export_excel(page: Page, output_path: Path, label: str) -> None:
     output_path.parent.mkdir(exist_ok=True)
     shutil.copy(temp_path, output_path)
     print(f"Saved {label}: {output_path} ({output_path.stat().st_size} bytes)")
+
+
+def _dump_all_buttons(page: Page, label: str) -> None:
+    """Diagnostic helper: print every clickable element so we can identify the
+    real Export button from CI logs."""
+    try:
+        clickables = page.locator(
+            "button, a, input[type='button'], input[type='submit'], "
+            "[role='button'], .ui.button"
+        )
+        n = clickables.count()
+        print(f"\n[{label}] DIAGNOSTIC — Clickable elements on page ({n}):")
+        shown = 0
+        for i in range(n):
+            try:
+                el = clickables.nth(i)
+                if not el.is_visible():
+                    continue
+                txt = (el.inner_text() or "").strip().replace('\n', ' ')
+                val = (el.get_attribute("value") or "").strip()
+                cls = (el.get_attribute("class") or "").strip()
+                ide = (el.get_attribute("id") or "").strip()
+                tag = el.evaluate("el => el.tagName.toLowerCase()")
+                print(f"  [{i}] <{tag}> text='{txt[:50]}'  value='{val[:30]}'  id='{ide[:30]}'  class='{cls[:80]}'")
+                shown += 1
+                if shown >= 40:
+                    print(f"  ... ({n - i - 1} more elements not shown)")
+                    break
+            except Exception:
+                continue
+        print("")
+    except Exception as e:
+        print(f"[{label}] Could not dump buttons: {e}")
 
 
 # ─── Orchestration ───────────────────────────────────────────────────────────

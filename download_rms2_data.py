@@ -1,6 +1,7 @@
 """
 RMS2 Data Downloader - GitHub Actions Compatible
-Downloads the 24-month RCB data from RMS2
+Downloads both 24-month and 12-month data from RMS2
+Workflow: Type period → Apply Filters → Export Excel
 """
 
 import os
@@ -43,34 +44,139 @@ class RMS2Downloader:
         print(f"[{datetime.now()}] ✓ Login successful!")
         return True
 
-    async def download_rcb_data(self):
-        """Navigate to RCB page and download the Excel file"""
+    async def navigate_to_rcb(self):
+        """Navigate to RCB page"""
         print(f"[{datetime.now()}] Navigating to RCB page...")
         await self.page.goto(self.base_url, timeout=60000)
         await self.page.wait_for_load_state("networkidle")
         await asyncio.sleep(3)
         
-        # Take screenshot for debugging
+        # Take screenshot of RCB page for debugging
         screenshot_path = f"data/rcb_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         await self.page.screenshot(path=screenshot_path)
         print(f"[{datetime.now()}] RCB page screenshot saved: {screenshot_path}")
         
-        # Look for Export/Download button
-        print(f"[{datetime.now()}] Looking for Export button...")
+        print(f"[{datetime.now()}] ✓ At RCB page")
+
+    async def download_period_data(self, period_value, output_filename):
+        """
+        Download data for a specific period
+        Steps:
+        1. Clear and type the period value (12 or 24) into the input field
+        2. Click "Apply Filters" button
+        3. Click "Export Excel" button and download
+        """
+        print(f"\n[{datetime.now()}] {'='*50}")
+        print(f"[{datetime.now()}] DOWNLOADING {period_value}-MONTH DATA")
+        print(f"[{datetime.now()}] Saving to: {output_filename}")
+        print(f"[{datetime.now()}] {'='*50}")
+        
+        # Step 1: Find and clear the period input field
+        # The input has placeholder="12" and type="text"
+        print(f"[{datetime.now()}] Step 1: Finding period input field...")
+        
+        period_input_selectors = [
+            "input[placeholder='12']",
+            "input[placeholder='24']",
+            "input[type='text'][class*='MuiOutlinedInput-input']",
+            ".MuiOutlinedInput-input",
+            "input[class*='MuiInputBase-input']",
+        ]
+        
+        period_input = None
+        for selector in period_input_selectors:
+            try:
+                element = await self.page.query_selector(selector)
+                if element:
+                    period_input = element
+                    print(f"[{datetime.now()}] ✓ Found period input with selector: {selector}")
+                    break
+            except:
+                continue
+        
+        if not period_input:
+            # Try to find by placeholder text
+            print(f"[{datetime.now()}] Looking for input with placeholder containing number...")
+            all_inputs = await self.page.query_selector_all("input[type='text']")
+            for inp in all_inputs:
+                placeholder = await inp.get_attribute("placeholder") or ""
+                if placeholder.isdigit() or placeholder in ["12", "24"]:
+                    period_input = inp
+                    print(f"[{datetime.now()}] ✓ Found period input with placeholder='{placeholder}'")
+                    break
+        
+        if not period_input:
+            print(f"[{datetime.now()}] ❌ Could not find period input field!")
+            # Dump all inputs for debugging
+            all_inputs = await self.page.query_selector_all("input")
+            print(f"[{datetime.now()}] All input fields found:")
+            for i, inp in enumerate(all_inputs):
+                inp_type = await inp.get_attribute("type") or ""
+                inp_placeholder = await inp.get_attribute("placeholder") or ""
+                inp_class = await inp.get_attribute("class") or ""
+                print(f"  Input {i}: type='{inp_type}', placeholder='{inp_placeholder}', class='{inp_class[:50]}'")
+            return False
+        
+        # Clear and fill the period input
+        try:
+            await period_input.fill("")
+            await asyncio.sleep(0.5)
+            await period_input.fill(str(period_value))
+            print(f"[{datetime.now()}] ✓ Set period to: {period_value}")
+            await asyncio.sleep(1)
+        except Exception as e:
+            print(f"[{datetime.now()}] ❌ Failed to set period value: {e}")
+            return False
+        
+        # Step 2: Click "Apply Filters" button
+        print(f"[{datetime.now()}] Step 2: Clicking 'Apply Filters' button...")
+        
+        apply_filters_selectors = [
+            "button:has-text('Apply Filters')",
+            "button.rcb-apply-btn",
+            "button:has-text('Apply')",
+            "button:has-text('Filter')",
+            ".rcb-apply-btn",
+            "button[class*='apply']",
+        ]
+        
+        apply_clicked = False
+        for selector in apply_filters_selectors:
+            try:
+                element = await self.page.query_selector(selector)
+                if element:
+                    await self.page.click(selector, timeout=5000)
+                    print(f"[{datetime.now()}] ✓ Clicked 'Apply Filters' using: {selector}")
+                    apply_clicked = True
+                    break
+            except:
+                continue
+        
+        if not apply_clicked:
+            print(f"[{datetime.now()}] ❌ Could not find 'Apply Filters' button!")
+            # Dump all buttons for debugging
+            all_buttons = await self.page.query_selector_all("button")
+            print(f"[{datetime.now()}] All buttons found:")
+            for i, btn in enumerate(all_buttons):
+                btn_text = await btn.text_content() or ""
+                btn_class = await btn.get_attribute("class") or ""
+                print(f"  Button {i}: text='{btn_text[:30]}', class='{btn_class[:50]}'")
+            return False
+        
+        # Wait for data to load after applying filters
+        print(f"[{datetime.now()}] Waiting for data to load...")
+        await asyncio.sleep(5)
+        
+        # Step 3: Click "Export Excel" button and download
+        print(f"[{datetime.now()}] Step 3: Clicking 'Export Excel' button...")
         
         export_selectors = [
+            "button:has-text('Export Excel')",
             "button:has-text('Export')",
+            ".rcb-header-btn",
+            "button[class*='rcb-header-btn']",
             "button:has-text('Excel')",
-            "button:has-text('Download')",
-            "button:has-text('Export to Excel')",
-            "button:has-text('Export to excel')",
-            "a:has-text('Export')",
-            "a:has-text('Excel')",
-            "button[title*='Export']",
-            ".export-excel",
-            ".excel-button",
-            "button:has-text('CSV')",
-            "a[download]",
+            "button i.file.excel.outline.icon",
         ]
         
         for selector in export_selectors:
@@ -85,13 +191,10 @@ class RMS2Downloader:
                         print(f"[{datetime.now()}] Clicked export button, waiting for download...")
                         
                         download = await download_info.value
-                        
-                        # Determine filename (should be RCB_24months.xlsx)
                         suggested_filename = download.suggested_filename
                         print(f"[{datetime.now()}] Suggested filename: {suggested_filename}")
                         
-                        # Save as RCB_24months.xlsx
-                        output_filename = "data/RCB_24months.xlsx"
+                        # Save with the specified output filename
                         await download.save_as(output_filename)
                         
                         if Path(output_filename).exists():
@@ -103,36 +206,7 @@ class RMS2Downloader:
                 print(f"  Export selector '{selector}' failed: {str(e)[:80]}")
                 continue
         
-        # If no export button found, look for any link that might download Excel
-        print(f"[{datetime.now()}] Looking for download links...")
-        links = await self.page.query_selector_all("a")
-        for link in links:
-            href = await link.get_attribute("href") or ""
-            if ".xlsx" in href or ".xls" in href or "export" in href.lower():
-                print(f"[{datetime.now()}] Found potential download link: {href}")
-                try:
-                    async with self.page.context.expect_download(timeout=120000) as download_info:
-                        await link.click()
-                        download = await download_info.value
-                        await download.save_as("data/RCB_24months.xlsx")
-                        
-                        if Path("data/RCB_24months.xlsx").exists():
-                            file_size = Path("data/RCB_24months.xlsx").stat().st_size
-                            print(f"[{datetime.now()}] ✓ Downloaded via link: RCB_24months.xlsx ({file_size:,} bytes)")
-                            return True
-                except Exception as e:
-                    print(f"  Link download failed: {str(e)[:50]}")
-                    continue
-        
-        print(f"[{datetime.now()}] ⚠️ Could not find export button or download link!")
-        
-        # Save HTML for debugging
-        html_path = f"data/rcb_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        html_content = await self.page.content()
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        print(f"[{datetime.now()}] Page HTML saved to: {html_path}")
-        
+        print(f"[{datetime.now()}] ❌ Could not find 'Export Excel' button!")
         return False
 
     async def run(self):
@@ -155,23 +229,50 @@ class RMS2Downloader:
             self.page = await self.context.new_page()
             print(f"[{datetime.now()}] ✓ Browser ready")
             
-            # Login and download
+            # Login and navigate
             await self.login()
-            success = await self.download_rcb_data()
+            await self.navigate_to_rcb()
             
-            if success:
-                print(f"[{datetime.now()}] ========================================")
-                print(f"[{datetime.now()}] ✓ RCB_24months.xlsx DOWNLOADED SUCCESSFULLY!")
-                print(f"[{datetime.now()}] ========================================")
+            # Download 24-month data first
+            success_24 = await self.download_period_data(24, "data/RCB_24months.xlsx")
+            
+            if not success_24:
+                print(f"[{datetime.now()}] ⚠️ Failed to download 24-month data")
+            
+            # Wait between downloads
+            await asyncio.sleep(3)
+            
+            # Download 12-month data
+            success_12 = await self.download_period_data(12, "data/RCB_12months.xlsx")
+            
+            if not success_12:
+                print(f"[{datetime.now()}] ⚠️ Failed to download 12-month data")
+            
+            # Final summary
+            print(f"\n[{datetime.now()}] ========================================")
+            print(f"[{datetime.now()}] DOWNLOAD SUMMARY")
+            print(f"[{datetime.now()}] ========================================")
+            print(f"  24-month data: {'✅ SUCCESS' if success_24 else '❌ FAILED'}")
+            print(f"  12-month data: {'✅ SUCCESS' if success_12 else '❌ FAILED'}")
+            
+            # Verify files exist
+            print(f"\n[{datetime.now()}] Verifying downloaded files...")
+            for file in ["data/RCB_24months.xlsx", "data/RCB_12months.xlsx"]:
+                if Path(file).exists():
+                    size = Path(file).stat().st_size
+                    print(f"  ✅ {file} ({size:,} bytes)")
+                else:
+                    print(f"  ❌ {file} not found")
+            
+            if success_24 and success_12:
+                print(f"\n[{datetime.now()}] 🎉 ALL FILES DOWNLOADED SUCCESSFULLY!")
                 return True
             else:
-                print(f"[{datetime.now()}] ========================================")
-                print(f"[{datetime.now()}] ✗ DOWNLOAD FAILED")
-                print(f"[{datetime.now()}] ========================================")
+                print(f"\n[{datetime.now()}] ⚠️ Some downloads failed. Check logs above.")
                 return False
             
         except Exception as e:
-            print(f"[{datetime.now()}] ✗ ERROR: {str(e)}")
+            print(f"[{datetime.now()}] ❌ ERROR: {str(e)}")
             if self.page:
                 screenshot_path = f"data/error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 await self.page.screenshot(path=screenshot_path)

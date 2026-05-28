@@ -150,37 +150,61 @@ def open_rcb_page(page: Page) -> None:
     page.wait_for_load_state("networkidle", timeout=60000)
     screenshot(page, "03_rcb_page.png")
 
+def set_last_months(page, months, label):
+    print(f"Setting Last Months = {months}")
 
-def set_last_months(page: Page, months: int, label: str) -> None:
-    """
-    Fill the 'Last Months' input shown on the RCB page.
-    """
-    last_months_selectors = [
-        # Best selector based on visible label
-        "input:near(:text('Last Months'))",
-        # Common possibilities
-        "input[name='lastMonths']",
-        "input[name='LastMonths']",
-        "input[name='LastMonth']",
-        "input[name='months']",
-        "input[name='Months']",
-        "#lastMonths",
-        "#LastMonths",
-        "#LastMonth",
-        "#months",
-        "#Months",
-        # Fallback: numeric/text field near filter section
+    selectors = [
+        # Most likely based on screenshot position
+        "input[type='text']",
+
+        # Fallback numeric fields
         "input[type='number']",
-        "input[placeholder*='month' i]",
-        "input[aria-label*='month' i]",
+
+        # Generic filter area inputs
+        ".filters input",
+        ".filter input",
+        "form input",
     ]
 
-    if not fill_first_available(page, last_months_selectors, str(months), f"{label} Last Months"):
+    success = False
+
+    for selector in selectors:
+        try:
+            elements = page.locator(selector)
+            count = elements.count()
+
+            for i in range(count):
+                try:
+                    el = elements.nth(i)
+
+                    # Visible only
+                    if not el.is_visible():
+                        continue
+
+                    value = el.input_value()
+
+                    # Your screenshot shows current value = 12
+                    if value.strip() in ["12", "24", ""]:
+                        el.fill("")
+                        el.fill(str(months))
+                        print(f"Updated Last Months field using {selector} index {i}")
+                        success = True
+                        break
+
+                except Exception:
+                    continue
+
+            if success:
+                break
+
+        except Exception:
+            continue
+
+    if not success:
         screenshot(page, f"{label}_last_months_not_found_error.png")
         raise RuntimeError(f"Could not find Last Months field for {label}.")
 
     screenshot(page, f"04_{label}_last_months_filled.png")
-
 
 def apply_filters(page: Page, label: str) -> None:
     apply_selectors = [

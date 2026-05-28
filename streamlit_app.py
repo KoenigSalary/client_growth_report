@@ -18,6 +18,9 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 
+# 🆕 NEW: Import for loading/saving .env file
+from dotenv import load_dotenv
+
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(
     page_title="Client Growth Report",
@@ -111,6 +114,14 @@ if "reset_email" not in st.session_state:
 if "reset_otp" not in st.session_state:
     st.session_state.reset_otp = None
 
+# 🆕 NEW: Initialize exchange rate in session state
+if "inr_to_usd_rate" not in st.session_state:
+    try:
+        load_dotenv()
+        st.session_state.inr_to_usd_rate = float(os.getenv('INR_TO_USD_RATE', '86'))
+    except:
+        st.session_state.inr_to_usd_rate = 86.0
+
 # ----------------- HELPER FUNCTIONS -----------------
 
 
@@ -166,7 +177,7 @@ def check_workflow_status():
         return None, None
 
 
-def send_email_report(report_file_path, recipient_emails):
+def send_email_report(report_file_path, recipient_emails, exchange_rate):
     """Send email with report attachment via Outlook365"""
     try:
         sender_email = st.secrets.get("SMTP_EMAIL", "")
@@ -189,7 +200,7 @@ Please find attached the Client Growth Report generated on {datetime.now().strft
 
 Report Summary:
 - Data Period: Previous 12M vs Current 12M
-- Exchange Rate: 1 USD = 84 INR
+- Exchange Rate: 1 USD = {exchange_rate:.2f} INR
 - High Growth Filter: Previous ≤$5K, Current ≥$50K
 
 Report includes 4 sheets:
@@ -230,7 +241,8 @@ Koenig Solutions Automated Report System
         return False, str(e)
 
 
-def generate_report_with_email(file_24m_path, file_12m_path, source="manual"):
+# 🆕 NEW: Updated to accept exchange_rate parameter
+def generate_report_with_email(file_24m_path, file_12m_path, source="manual", exchange_rate=86):
     """Generate report and optionally send email"""
     try:
         from process_report import process_growth_report
@@ -243,7 +255,8 @@ def generate_report_with_email(file_24m_path, file_12m_path, source="manual"):
         output_dir.mkdir(exist_ok=True)
         output_file = output_dir / f"Client_Growth_Report_{timestamp}.xlsx"
 
-        result = process_growth_report(df_24m, df_12m, str(output_file))
+        # 🆕 NEW: Pass exchange rate to process_growth_report
+        result = process_growth_report(df_24m, df_12m, str(output_file), exchange_rate)
 
         if output_file.exists():
             return True, output_file, result
@@ -292,6 +305,41 @@ Koenig Solutions Automated Report System
         return True, "Reset code sent successfully"
     except Exception as e:
         return False, str(e)
+
+
+# 🆕 NEW: Function to save exchange rate to .env file
+def save_exchange_rate_to_env(rate):
+    """Save exchange rate to .env file for persistence"""
+    env_path = Path(".env")
+    
+    try:
+        if env_path.exists():
+            # Read existing .env
+            with open(env_path, 'r') as f:
+                lines = f.readlines()
+            
+            # Update or add INR_TO_USD_RATE
+            updated = False
+            for i, line in enumerate(lines):
+                if line.startswith('INR_TO_USD_RATE='):
+                    lines[i] = f'INR_TO_USD_RATE={rate}\n'
+                    updated = True
+                    break
+            
+            if not updated:
+                lines.append(f'INR_TO_USD_RATE={rate}\n')
+            
+            # Write back
+            with open(env_path, 'w') as f:
+                f.writelines(lines)
+        else:
+            # Create new .env
+            with open(env_path, 'w') as f:
+                f.write(f'INR_TO_USD_RATE={rate}\n')
+        return True
+    except Exception as e:
+        print(f"Warning: Could not save exchange rate to .env: {e}")
+        return False
 
 
 # ----------------- LOGIN + FORGOT PASSWORD -----------------
@@ -493,6 +541,34 @@ with st.sidebar:
         else:
             st.warning(f"⚠️ Old: {hours_ago/24:.1f}d ago")
 
+    # 🆕 NEW: Exchange Rate Settings Section
+    st.markdown("---")
+    st.markdown("### 💱 Exchange Rate Settings")
+    
+    # Display current rate and allow adjustment
+    current_rate = st.session_state.inr_to_usd_rate
+    
+    new_rate = st.number_input(
+        "INR to USD Rate",
+        min_value=50.0,
+        max_value=150.0,
+        value=current_rate,
+        step=0.5,
+        format="%.2f",
+        help="Current exchange rate: 1 USD = X INR\nUpdate this when rates change."
+    )
+    
+    # Check if rate changed
+    if new_rate != current_rate:
+        st.session_state.inr_to_usd_rate = new_rate
+        save_exchange_rate_to_env(new_rate)
+        st.success(f"✅ Exchange rate updated to 1 USD = {new_rate:.2f} INR")
+        st.rerun()
+    
+    # Show conversion example
+    st.caption(f"Example: ₹{new_rate * 1000:,.0f} INR = $1,000 USD")
+    st.caption(f"Example: ₹{new_rate * 10000:,.0f} INR = $10,000 USD")
+
     # GitHub Actions trigger
     if auto_files_exist or st.secrets.get("GITHUB_TOKEN"):
         st.markdown("---")
@@ -505,7 +581,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### About")
     st.info(
-        """
+        f"""
+**Current Exchange Rate:** 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
+
 **High Growth Filter:**
 - Previous ≤ $5,000
 - Current ≥ $50,000
@@ -590,10 +668,12 @@ if st.session_state.get("run_full_automation", False):
         status_text.info("📊 Step 4/5: Generating growth report...")
         progress_bar.progress(80)
 
+        # 🆕 NEW: Pass exchange rate to report generation
         success, report_file, result = generate_report_with_email(
             Path("data/RCB_24months.xlsx"),
             Path("data/RCB_12months.xlsx"),
             "auto",
+            st.session_state.inr_to_usd_rate  # Pass current rate
         )
 
         if success:
@@ -608,7 +688,8 @@ if st.session_state.get("run_full_automation", False):
             recipient_emails = [email.strip() for email in recipient_emails if email.strip()]
 
             if recipient_emails:
-                email_success, email_message = send_email_report(report_file, recipient_emails)
+                # 🆕 NEW: Pass exchange rate to email
+                email_success, email_message = send_email_report(report_file, recipient_emails, st.session_state.inr_to_usd_rate)
 
                 if email_success:
                     status_text.success(f"✅ Step 5/5: {email_message}")
@@ -629,6 +710,7 @@ if st.session_state.get("run_full_automation", False):
 - ✅ Data validated  
 - ✅ Report generated (**{result.get('total_clients', 0)}** clients)  
 - ✅ Email sent to {len(recipient_emails)} recipient(s)
+- 💱 Exchange rate used: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
 """,
                 unsafe_allow_html=True,
             )
@@ -668,21 +750,31 @@ Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}
 
 - RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)  
 - RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)
+
+💱 Current exchange rate: **1 USD = {st.session_state.inr_to_usd_rate:.2f} INR**
 """,
             unsafe_allow_html=True,
         )
 
         st.markdown("---")
 
+        # 🆕 NEW: Show warning if rate is unusual
+        if st.session_state.inr_to_usd_rate < 60 or st.session_state.inr_to_usd_rate > 100:
+            st.warning(f"⚠️ Exchange rate ({st.session_state.inr_to_usd_rate:.2f}) is outside typical range (60-100). Please verify the rate is correct.")
+
         if st.button("📊 Generate Report & Send Email", key="generate_auto"):
             with st.spinner("Generating report..."):
+                # 🆕 NEW: Pass exchange rate
                 success, report_file, result = generate_report_with_email(
-                    file_24m_path, file_12m_path, "auto"
+                    file_24m_path, 
+                    file_12m_path, 
+                    "auto",
+                    st.session_state.inr_to_usd_rate
                 )
 
                 if success:
                     st.success(
-                        f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed"
+                        f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed (using rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR)"
                     )
 
                     recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
@@ -691,8 +783,9 @@ Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}
                     ]
 
                     if recipient_emails:
+                        # 🆕 NEW: Pass exchange rate to email
                         email_success, email_message = send_email_report(
-                            report_file, recipient_emails
+                            report_file, recipient_emails, st.session_state.inr_to_usd_rate
                         )
                         if email_success:
                             st.success(f"📧 {email_message}")
@@ -719,12 +812,15 @@ else:  # Manual Upload
     st.header("📥 Manual Upload")
 
     st.markdown(
-        """
+        f"""
 Instructions:
 
 1. Download **RCB_24months.xlsx** and **RCB_12months.xlsx** from RMS2  
 2. Upload both files below  
 3. Click **"Generate Report & Send Email"**
+
+💱 Current exchange rate: **1 USD = {st.session_state.inr_to_usd_rate:.2f} INR**  
+   (You can change this in the sidebar if needed)
 """,
         unsafe_allow_html=True,
     )
@@ -765,14 +861,18 @@ Instructions:
         with open(temp_12m, "wb") as f:
             f.write(file_12m.getbuffer())
 
-        with st.spinner("Generating report..."):
+        with st.spinner(f"Generating report using exchange rate 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR..."):
+            # 🆕 NEW: Pass exchange rate
             success, report_file, result = generate_report_with_email(
-                temp_24m, temp_12m, "manual"
+                temp_24m, 
+                temp_12m, 
+                "manual",
+                st.session_state.inr_to_usd_rate
             )
 
             if success:
                 st.success(
-                    f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed"
+                    f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed (using rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR)"
                 )
 
                 recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
@@ -781,8 +881,9 @@ Instructions:
                 ]
 
                 if recipient_emails:
+                    # 🆕 NEW: Pass exchange rate to email
                     email_success, email_message = send_email_report(
-                        report_file, recipient_emails
+                        report_file, recipient_emails, st.session_state.inr_to_usd_rate
                     )
                     if email_success:
                         st.success(f"📧 {email_message}")
@@ -804,9 +905,9 @@ Instructions:
 # ----------------- FOOTER -----------------
 st.markdown("---")
 st.markdown(
-    """
+    f"""
 <div style="text-align:center; font-size:0.9rem; color:grey;">
-Client Growth Report Generator v2.0 | © 2025 Koenig Solutions
+Client Growth Report Generator v2.0 | © 2025 Koenig Solutions | Exchange Rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
 </div>
 """,
     unsafe_allow_html=True,

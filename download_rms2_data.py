@@ -1,92 +1,174 @@
-name: Download RMS2 Data
+"""
+RMS2 Data Downloader - GitHub Actions compatible
+Downloads RCB_24months.xlsx and RCB_12months.xlsx from RMS2
+Uses Playwright with proper two-step download process (Display → Export)
+"""
 
-on:
-  # Run monthly on the 14th at 6 AM UTC
-  schedule:
-    - cron: '0 6 14 * *'
+import os
+import time
+import asyncio
+from pathlib import Path
+from datetime import datetime
+from playwright.async_api import async_playwright
 
-  # Allow manual trigger from GitHub Actions UI
-  workflow_dispatch:
 
-permissions:
-  contents: write
+class RMS2Downloader:
+    def __init__(self, username, password, login_url, base_url, headless=True):
+        self.username = username
+        self.password = password
+        self.login_url = login_url
+        self.base_url = base_url
+        self.headless = headless
+        self.page = None
+        self.context = None
+        self.browser = None
+        self.playwright = None
 
-jobs:
-  download-data:
-    runs-on: ubuntu-latest
+    async def login(self):
+        """Login to RMS2 with credentials"""
+        print(f"[{datetime.now()}] Logging in to RMS2...")
+        
+        await self.page.goto(self.login_url, timeout=60000)
+        await self.page.wait_for_load_state("networkidle")
+        
+        # Fill username and password
+        await self.page.fill("input[name='username']", self.username)
+        await self.page.fill("input[name='password']", self.password)
+        
+        # Click login button - RMS2 uses button.ui.positive.button
+        await self.page.click("button.ui.positive.button", timeout=10000)
+        await self.page.wait_for_load_state("networkidle")
+        
+        print(f"[{datetime.now()}] Login submitted, checking success...")
+        
+        # Check if login succeeded
+        if "login" in self.page.url.lower():
+            raise Exception("Login failed - still on login page")
+        
+        print(f"[{datetime.now()}] ✓ Login successful!")
+        return True
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+    async def navigate_to_rcb(self):
+        """Navigate to RCB page"""
+        print(f"[{datetime.now()}] Navigating to RCB page...")
+        await self.page.goto(self.base_url, timeout=60000)
+        await self.page.wait_for_load_state("networkidle")
+        time.sleep(2)
+        print(f"[{datetime.now()}] ✓ At RCB page")
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    async def download_period(self, period_months, output_filename):
+        """
+        Download data for specified period using two-step process:
+        1. Select period and click "Display" button
+        2. Wait for data to load
+        3. Click "Export to excel" button
+        """
+        print(f"[{datetime.now()}] Downloading {period_months}-month data...")
+        
+        # Step 1: Select period from dropdown
+        await self.page.select_option("select", str(period_months))
+        print(f"[{datetime.now()}]   Selected {period_months} months period")
+        
+        # Step 2: Click "Display" button to load data
+        await self.page.click("button.ui.mini.button:has-text('Display')", timeout=10000)
+        print(f"[{datetime.now()}]   Clicked 'Display' button")
+        
+        # Wait for data to load (3 seconds for table to refresh)
+        await asyncio.sleep(3)
+        
+        # Step 3: Click "Export to excel" button and download
+        async with self.page.context.expect_download() as download_info:
+            await self.page.click("button.ui.mini.button:has-text('Export to excel')", timeout=10000)
+            print(f"[{datetime.now()}]   Clicked 'Export to excel' button")
+        
+        # Save the downloaded file
+        download = await download_info.value
+        await download.save_as(output_filename)
+        
+        # Verify file was saved
+        if Path(output_filename).exists():
+            file_size = Path(output_filename).stat().st_size
+            print(f"[{datetime.now()}] ✓ Downloaded: {output_filename} ({file_size:,} bytes)")
+            return True
+        else:
+            raise Exception(f"Failed to save {output_filename}")
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright pandas openpyxl python-dotenv requests
+    async def download_24month_data(self):
+        """Download 24-month data"""
+        return await self.download_period(24, "data/RCB_24months.xlsx")
 
-      - name: Install Playwright Chromium browser + OS dependencies
-        # playwright install-deps installs the correct system packages for the current
-        # Ubuntu version automatically — no manual packages.txt conflicts.
-        run: |
-          playwright install chromium
-          playwright install-deps chromium
+    async def download_12month_data(self):
+        """Download 12-month data"""
+        return await self.download_period(12, "data/RCB_12months.xlsx")
 
-      - name: Create data directory
-        run: mkdir -p data
+    async def run(self):
+        """Main execution flow"""
+        try:
+            print(f"[{datetime.now()}] ========================================")
+            print(f"[{datetime.now()}] Starting RMS2 Data Download")
+            print(f"[{datetime.now()}] ========================================")
+            
+            # Create data directory if needed
+            Path("data").mkdir(exist_ok=True)
+            
+            # Launch browser
+            print(f"[{datetime.now()}] Launching Chromium browser...")
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.launch(
+                headless=self.headless,
+                args=['--disable-dev-shm-usage']  # For GitHub Actions
+            )
+            self.context = await self.browser.new_context()
+            self.page = await self.context.new_page()
+            print(f"[{datetime.now()}] ✓ Browser ready")
+            
+            # Execute steps
+            await self.login()
+            await self.navigate_to_rcb()
+            await self.download_24month_data()
+            await self.download_12month_data()
+            
+            print(f"[{datetime.now()}] ========================================")
+            print(f"[{datetime.now()}] ✓ ALL FILES DOWNLOADED SUCCESSFULLY!")
+            print(f"[{datetime.now()}] ========================================")
+            return True
+            
+        except Exception as e:
+            print(f"[{datetime.now()}] ✗ ERROR: {str(e)}")
+            
+            # Take screenshot on error
+            if self.page:
+                screenshot_path = f"data/error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                await self.page.screenshot(path=screenshot_path)
+                print(f"[{datetime.now()}] Screenshot saved: {screenshot_path}")
+            
+            raise
+            
+        finally:
+            # Clean up
+            if self.browser:
+                await self.browser.close()
+            if self.playwright:
+                await self.playwright.stop()
 
-      - name: Download RMS2 data files
-        env:
-          RMS_USERNAME: ${{ secrets.RMS_USERNAME }}
-          RMS_PASSWORD: ${{ secrets.RMS_PASSWORD }}
-          RMS_LOGIN_URL: 'https://rms2.koenig-solutions.com'
-          RCB_BASE_URL: 'https://rms2.koenig-solutions.com/RCB'
-        run: |
-          python download_rms2_data.py
 
-      - name: Verify downloaded files
-        run: |
-          echo "=== Checking downloaded files ==="
-          ls -lh data/
+def main():
+    """Entry point for GitHub Actions"""
+    username = os.environ.get("RMS_USERNAME")
+    password = os.environ.get("RMS_PASSWORD")
+    login_url = os.environ.get("RMS_LOGIN_URL", "https://rms2.koenig-solutions.com")
+    base_url = os.environ.get("RCB_BASE_URL", "https://rms2.koenig-solutions.com/RCB")
+    
+    if not username or not password:
+        raise ValueError("RMS_USERNAME and RMS_PASSWORD environment variables must be set")
+    
+    # Run the async downloader (headless=True for GitHub Actions)
+    downloader = RMS2Downloader(username, password, login_url, base_url, headless=True)
+    success = asyncio.run(downloader.run())
+    
+    if not success:
+        exit(1)
 
-          if [ ! -f "data/RCB_24months.xlsx" ]; then
-            echo "ERROR: RCB_24months.xlsx not found!"
-            exit 1
-          fi
 
-          if [ ! -f "data/RCB_12months.xlsx" ]; then
-            echo "ERROR: RCB_12months.xlsx not found!"
-            exit 1
-          fi
-
-          echo "SUCCESS: Both data files present."
-
-      - name: Configure Git for commit
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "GitHub Actions Bot"
-
-      - name: Commit and push updated data files
-        run: |
-          git add data/RCB_24months.xlsx data/RCB_12months.xlsx
-
-          if git diff --staged --quiet; then
-            echo "No data changes to commit (files unchanged)."
-          else
-            git commit -m "chore: update RMS2 data files [$(date +'%Y-%m-%d %H:%M UTC')]"
-            git push
-          fi
-
-      - name: Upload error screenshots on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-screenshots
-          path: data/*error*.png
-          if-no-files-found: ignore
+if __name__ == "__main__":
+    main()

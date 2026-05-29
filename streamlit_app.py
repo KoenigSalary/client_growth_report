@@ -251,18 +251,44 @@ if mode == "🌐 Live RMS2 Download (with OTP)":
     # ── Step 2: Start / Manual Run button ───────────────────────────────────
     if session is None or session.state in ("idle", "done", "error"):
         st.markdown("### Step 1: Start RMS2 Login")
-        if st.button("▶️ Run RMS2 Download (Manual Trigger)",
-                     use_container_width=True, key="start_rms2"):
-            try:
-                from rms2_downloader import RMS2Session
-                new_session = RMS2Session(rms_user, rms_pass, data_dir="data",
-                                          headless=True)
-                new_session.start()
-                st.session_state.rms2_session = new_session
-                st.session_state.auto_refresh_otp = True
-                st.rerun()
-            except Exception as e:
-                st.error(f"Could not start RMS2 session: {e}")
+
+        col_a, col_b = st.columns([3, 1])
+        with col_b:
+            if st.button("🔧 Install Chromium",
+                         help="Run this once if you see a 'browser not found' error",
+                         use_container_width=True, key="install_chromium"):
+                from chromium_install import ensure_chromium_installed
+                with st.spinner("Installing Chromium browser... (may take 1-3 min)"):
+                    ok, msg = ensure_chromium_installed()
+                if ok:
+                    st.success(f"✅ {msg}")
+                else:
+                    st.error(f"❌ {msg}")
+
+        with col_a:
+            if st.button("▶️ Run RMS2 Download (Manual Trigger)",
+                         use_container_width=True, key="start_rms2"):
+                # Make sure Chromium is installed before launching
+                from chromium_install import ensure_chromium_installed
+                with st.spinner("Checking Chromium browser..."):
+                    ok, msg = ensure_chromium_installed()
+                if not ok:
+                    st.error(
+                        f"❌ Cannot start: Chromium not available.\n\n{msg}\n\n"
+                        "Try clicking '🔧 Install Chromium' first, or use "
+                        "**📥 Manual Upload** mode instead."
+                    )
+                else:
+                    try:
+                        from rms2_downloader import RMS2Session
+                        new_session = RMS2Session(rms_user, rms_pass,
+                                                  data_dir="data", headless=True)
+                        new_session.start()
+                        st.session_state.rms2_session = new_session
+                        st.session_state.auto_refresh_otp = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Could not start RMS2 session: {e}")
 
         # Show previous error if any
         if session is not None and session.state == "error":

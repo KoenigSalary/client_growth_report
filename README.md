@@ -1,149 +1,147 @@
-# Client Growth Report (OTP-aware v3.0)
+# Client Growth Report — Dual-Mode v4.0
 
-Interactive client-growth analysis for Koenig Solutions.
-Downloads RMS2 RCB data via the Streamlit dashboard, handles the new
-**OTP-on-every-login** requirement, and emails the resulting Excel report.
+Two ways to run, one shared codebase. Use whichever is convenient.
 
----
+| | **Streamlit Cloud** (always-on URL) | **Local Computer** (run on demand) |
+|---|---|---|
+| What it does | View reports, upload files manually | **Download fresh data from RMS2 with OTP** + everything else |
+| OTP handling | Not possible (no browser to interact with) | ✅ Real Chromium window opens — you type OTP into RMS2 itself |
+| Best for | Day-to-day viewing, sharing reports | Monthly download on the 14th |
+| Setup | Push to GitHub, configure secrets | Double-click a launcher script |
 
-## 🏗️ New Architecture (OTP-aware)
-
-Because RMS2 now sends a fresh OTP to your Outlook every single login,
-**fully unattended cron-based automation is no longer possible**.
-The flow now runs **interactively** from the Streamlit dashboard:
-
-```
-You open the Streamlit app
-    ↓
-Click "▶ Run RMS2 Download (Manual Trigger)"
-    ↓
-Streamlit launches headless Chromium in the background
-    ↓
-Script enters username + password automatically
-    ↓
-RMS2 sends a 6-digit OTP to your Outlook inbox
-    ↓
-Streamlit shows an OTP input box:
-   ┌───────────────────────────────┐
-   │  📧 OTP Required               │
-   │  [______]  ✅ Submit OTP       │
-   └───────────────────────────────┘
-    ↓
-You check Outlook → paste the OTP → click Submit
-    ↓
-Script continues: downloads 24M + 12M Excel files
-    ↓
-Click "📊 Generate Report & Email"
-    ↓
-Done! Report is emailed and downloadable.
-```
-
-The whole process takes ~3-5 minutes including waiting for the OTP email.
+The app **auto-detects** where it's running and shows the appropriate modes.
 
 ---
 
-## 📁 Files in this repo
+## 🖥️ Setup A — Run Locally (for RMS2 downloads)
+
+### Prerequisites
+- **Python 3.10 or newer** ([download](https://python.org))
+- Internet access
+
+### One-Click Launch
+
+**Windows:**
+1. Double-click `launchers/run_local_windows.bat`
+2. Wait ~2-3 minutes on first run (installs dependencies + Chromium)
+3. Your browser opens to `http://localhost:8501`
+
+**macOS / Linux:**
+1. Open Terminal in this folder
+2. Run: `./launchers/run_local_mac_linux.sh`
+3. Wait ~2-3 minutes on first run
+4. Your browser opens automatically
+
+### First-Time Setup: Save Credentials (Optional)
+
+Copy `.env.example` to `.env` and fill in your RMS2 login:
+```
+RMS_USERNAME=your-email@koenig-solutions.com
+RMS_PASSWORD=your-rms2-password
+```
+(If you skip this, the app will ask for credentials in a form.)
+
+### Using Local Mode
+
+1. Open the app at `http://localhost:8501`
+2. Login: `admin` / `admin123`
+3. Sidebar shows three modes — pick **🌐 Local RMS2 Download (visible browser + OTP)**
+4. Click **▶️ Launch Browser & Start Login**
+5. A **Chromium window pops up**, automatically fills email + password, clicks Login
+6. RMS2 shows the OTP screen — **check your Outlook, then type the OTP directly into the Chromium window** and click Submit
+7. Streamlit detects you've authenticated and continues:
+   - Downloads 24-month data
+   - Downloads 12-month data
+   - Closes the browser
+8. Click **Generate Growth Report & Email**
+9. Done!
+
+---
+
+## ☁️ Setup B — Streamlit Cloud (for viewing & manual uploads)
+
+### Push to GitHub
+
+1. Upload all files in this repo to https://github.com/KoenigSalary/client_growth_report
+2. Streamlit Cloud auto-redeploys
+
+### Configure Secrets (Optional, for email)
+
+Streamlit Cloud → **Manage app → Settings → Secrets**:
+```toml
+SMTP_EMAIL        = "you@koenig-solutions.com"
+SMTP_PASSWORD     = "outlook-app-password"
+SMTP_SERVER       = "smtp.office365.com"
+SMTP_PORT         = "587"
+REPORT_RECIPIENTS = "boss@x.com,team@x.com"
+```
+
+### Using Cloud Mode
+
+- **📥 Manual Upload** — drag & drop the two RCB Excel files you downloaded from RMS2 (in your normal browser, with OTP), then click Generate Report
+- **🤖 Use Last Downloaded Files** — only works if files were synced to the `data/` folder
+
+---
+
+## 📂 File Reference
 
 | File | Purpose |
 |------|---------|
-| `streamlit_app.py` | The dashboard. Login: `admin` / `admin123` |
-| `rms2_downloader.py` | Threaded Playwright session with OTP handoff |
+| `streamlit_app.py` | Dashboard — auto-detects environment |
+| `rms2_downloader_local.py` | Visible-Chromium downloader (local only) |
 | `process_report.py` | Builds the 4-sheet Excel output |
-| `requirements.txt` | Python deps including Playwright |
-| `packages.txt` | Chromium OS libs for Streamlit Cloud |
-| `setup.sh` | Installs Chromium binary (`playwright install chromium`) |
-| `.github/workflows/download-rms2-data.yml` | Disabled (OTP not automatable) |
+| `requirements.txt` | Python deps |
+| `packages.txt` | Empty — no OS deps needed |
+| `launchers/run_local_windows.bat` | One-click launcher for Windows |
+| `launchers/run_local_mac_linux.sh` | One-click launcher for macOS/Linux |
+| `.env.example` | Template for local credentials |
 
 ---
 
-## 🚀 Streamlit Cloud Setup
+## 🔑 Dashboard Login
 
-### 1. Push these files to your GitHub repo
-
-Just replace the previous repo contents with everything in this folder.
-
-### 2. Configure secrets in Streamlit Cloud
-
-Open your app → **Manage app → Settings → Secrets** and add:
-
-```toml
-# RMS2 login (required for Live Download mode)
-RMS_USERNAME = "monika.chopra@koenig-solutions.com"
-RMS_PASSWORD = "your-rms2-password"
-
-# Optional: email delivery
-SMTP_EMAIL        = "you@koenig-solutions.com"
-SMTP_PASSWORD     = "your-outlook-app-password"
-SMTP_SERVER       = "smtp.office365.com"
-SMTP_PORT         = "587"
-REPORT_RECIPIENTS = "boss@koenig-solutions.com,team@koenig-solutions.com"
-```
-
-### 3. Streamlit Cloud will:
-- Install `packages.txt` (Chromium OS libs)
-- Install `requirements.txt` (Python deps)
-- Run `setup.sh` (downloads the Chromium browser binary)
-- Start the app
-
-This takes ~3-5 minutes on first deployment.
+- Username: `admin`
+- Password: `admin123`
+- "Forgot Password?" lets you set a new one without email verification
 
 ---
 
-## 🎯 Using the Dashboard
+## 📊 Report Output
 
-After logging in (`admin` / `admin123`), the sidebar offers three modes:
+`Client_Growth_Report_YYYYMMDD_HHMMSS.xlsx` — 4 sheets:
 
-### 🌐 Live RMS2 Download (with OTP) — primary workflow
-1. Click **"▶ Run RMS2 Download (Manual Trigger)"**
-2. Wait for the OTP screen to appear (~10 seconds)
-3. Check your Outlook for the 6-digit code from RMS2
-4. Paste it into the OTP box and click **"✅ Submit OTP"**
-5. Wait for both downloads to complete (~1-2 minutes total)
-6. Click **"📊 Generate Report & Email"**
-
-### 📥 Manual Upload — if RMS2 is down or you have files already
-Upload the two `.xlsx` files yourself, then generate the report.
-
-### 🤖 Use Last Downloaded Files
-Re-process the most recent download without going to RMS2 again.
-
----
-
-## ✏️ Forgot Dashboard Password
-
-On the login screen, click **"Forgot Password?"** to set a new password
-without any email verification. Default is `admin` / `admin123`.
-
----
-
-## 📑 Output Format
-
-`Client_Growth_Report_YYYYMMDD_HHMMSS.xlsx` — **4 sheets**:
-
-1. **Growth Comparison** — all clients, sorted by Growth_USD descending
+1. **Growth Comparison** — all clients, sorted by Growth_USD desc
 2. **High Growth 5K-50K USD** — Previous ≤ $5K AND Current ≥ $50K
-3. **Summary** — top performer + overall statistics
-4. **Exceptions** — rows with negative values flagged for review
+3. **Summary** — top performer + overall stats
+4. **Exceptions** — rows with negative values
 
 Columns: `CorporateID`, `CompanyName`, `UserName`, `URL`,
 `Previous_12M_USD`, `Current_12M_USD`, `Growth_USD`, `Growth_%`
 
-Exchange rate: **1 USD = 86 INR** (configurable in `process_report.py`)
+Exchange rate: **1 USD = 86 INR** (edit in `process_report.py` if needed)
 
 ---
 
-## ⚠️ Known Constraint: No Fully-Automatic Monthly Run
+## 🩺 Troubleshooting
 
-Because OTP is required on every RMS2 login and OTPs need a human to
-read the email and type the code, the monthly cron-style automation
-that ran on the 14th has been **disabled**.
+| Symptom | Fix |
+|---|---|
+| "Python not found" on Windows | Install Python 3.10+ from python.org; check "Add to PATH" |
+| `playwright install` fails | Run `python -m playwright install --with-deps chromium` manually |
+| Chromium window doesn't appear | Ensure you're running locally (not on Streamlit Cloud); badge in top-right should say 🖥️ LOCAL MODE |
+| OTP timeout | You have 5 minutes to type the OTP. Just click Cancel and try again. |
+| Wrong files in Last Downloaded | Run Local Mode again — files are auto-overwritten |
 
-To work around this:
-- Set a calendar reminder for the 14th of each month
-- Open the Streamlit app
-- Complete the OTP flow once (~3-5 minutes of your time)
-- The report is generated and emailed automatically from there
+---
 
-If Koenig IT later provides a service account that bypasses OTP, the
-old GitHub Actions automation can be re-enabled by editing
-`.github/workflows/download-rms2-data.yml` (remove the `if: false`).
+## 📅 Monthly Workflow
+
+1. Around the 14th, open your laptop
+2. Double-click `run_local_windows.bat` (or `.sh` on Mac/Linux)
+3. Wait for the Streamlit page to open
+4. Pick "🌐 Local RMS2 Download"
+5. Click Launch → OTP → wait → Generate Report
+6. Email is sent automatically (if configured)
+7. Total time: **~5 minutes**
+
+That's it. No more daily failed GitHub Actions runs.

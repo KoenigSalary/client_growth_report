@@ -1,1 +1,9 @@
-
+# packages.txt - System packages for Streamlit Cloud
+#
+# WHY EMPTY: The Streamlit Cloud app does NOT run a browser.
+# - Browser automation (Playwright/Chromium) runs in GitHub Actions only.
+# - Streamlit Cloud only runs streamlit_app.py which reads Excel files.
+# - The old packages (libasound2, libcups2, etc.) conflicted with Streamlit Cloud's
+#   current OS (Debian Bookworm/Ubuntu 24.04) where these were renamed to *t64 variants.
+#
+# If you ever need Playwright in Streamlit Cloud itself, see README_DEPLOYMENT_FIX.md

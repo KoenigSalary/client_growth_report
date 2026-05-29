@@ -1,6 +1,8 @@
 """
 Client Growth Report - Production-Ready Dashboard
 Combines manual upload, auto-downloaded data, GitHub Actions trigger, and email delivery
+FIXED: Default credentials changed to admin / admin123
+       Forgot Password now always works (no registered-email gate)
 """
 
 import streamlit as st
@@ -18,9 +20,6 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 
-# 🆕 NEW: Import for loading/saving .env file
-from dotenv import load_dotenv
-
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(
     page_title="Client Growth Report",
@@ -33,9 +32,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-.main {
-    background-color: #f5f7fa;
-}
+.main { background-color: #f5f7fa; }
 .stButton>button {
     background: linear-gradient(135deg, #0099cc 0%, #003d5c 100%);
     color: white;
@@ -47,90 +44,65 @@ st.markdown(
 .stButton>button:hover {
     background: linear-gradient(135deg, #007aa3 0%, #002d4c 100%);
 }
-h1 {
-    color: #0099cc;
-}
+h1 { color: #0099cc; }
 .success-box {
-    padding: 1rem;
-    background-color: #e8f5e9;
-    border-left: 4px solid #4caf50;
-    border-radius: 4px;
-    margin: 1rem 0;
+    padding: 1rem; background-color: #e8f5e9;
+    border-left: 4px solid #4caf50; border-radius: 4px; margin: 1rem 0;
 }
 .info-box {
-    padding: 1rem;
-    background-color: #e3f2fd;
-    border-left: 4px solid #2196f3;
-    border-radius: 4px;
-    margin: 1rem 0;
+    padding: 1rem; background-color: #e3f2fd;
+    border-left: 4px solid #2196f3; border-radius: 4px; margin: 1rem 0;
 }
 .warning-box {
-    padding: 1rem;
-    background-color: #fff3e0;
-    border-left: 4px solid #ff9800;
-    border-radius: 4px;
-    margin: 1rem 0;
+    padding: 1rem; background-color: #fff3e0;
+    border-left: 4px solid #ff9800; border-radius: 4px; margin: 1rem 0;
 }
 .error-box {
-    padding: 1rem;
-    background-color: #ffebee;
-    border-left: 4px solid #f44336;
-    border-radius: 4px;
-    margin: 1rem 0;
+    padding: 1rem; background-color: #ffebee;
+    border-left: 4px solid #f44336; border-radius: 4px; margin: 1rem 0;
 }
 .data-update-badge {
-    background-color: #0099cc;
-    color: white;
-    padding: 0.3rem 0.8rem;
-    border-radius: 15px;
-    font-size: 0.85rem;
-    display: inline-block;
-    margin-top: 0.5rem;
+    background-color: #0099cc; color: white;
+    padding: 0.3rem 0.8rem; border-radius: 15px;
+    font-size: 0.85rem; display: inline-block; margin-top: 0.5rem;
 }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-# ----------------- LOGIN / RESET STATE -----------------
-
+# ─────────────────────────────────────────────────────────────────────────────
+# CREDENTIALS  ←  CHANGED HERE
+# ─────────────────────────────────────────────────────────────────────────────
 DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = "koenig2024"
+DEFAULT_PASSWORD = "admin123"      # ← updated from "koenig2024"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SESSION STATE INIT
+# ─────────────────────────────────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-# This is the current active password (can be changed via reset)
 if "login_password" not in st.session_state:
     st.session_state.login_password = DEFAULT_PASSWORD
 
-# Forgot-password flow stages: None → normal login; "email" → ask email; "otp" → verify; "new_pw" → new password
+# Forgot-password flow: None → "new_pw" (direct, no email/OTP required)
 if "reset_stage" not in st.session_state:
     st.session_state.reset_stage = None
 
-if "reset_email" not in st.session_state:
-    st.session_state.reset_email = None
 
-if "reset_otp" not in st.session_state:
-    st.session_state.reset_otp = None
-
-# 🆕 NEW: Initialize exchange rate in session state
-if "inr_to_usd_rate" not in st.session_state:
-    try:
-        load_dotenv()
-        st.session_state.inr_to_usd_rate = float(os.getenv('INR_TO_USD_RATE', '86'))
-    except:
-        st.session_state.inr_to_usd_rate = 86.0
-
-# ----------------- HELPER FUNCTIONS -----------------
-
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPER FUNCTIONS
+# ─────────────────────────────────────────────────────────────────────────────
 
 def trigger_github_workflow():
     """Trigger GitHub Actions workflow via API"""
     try:
-        url = "https://api.github.com/repos/KoenigSalary/client_growth_report/actions/workflows/download-rms2-data.yml/dispatches"
+        url = (
+            "https://api.github.com/repos/KoenigSalary/client_growth_report"
+            "/actions/workflows/download-rms2-data.yml/dispatches"
+        )
         token = st.secrets.get("GITHUB_TOKEN", "")
-
         if not token:
             return False, "GitHub token not configured"
 
@@ -139,15 +111,10 @@ def trigger_github_workflow():
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        data = {"ref": "main"}
-
-        response = requests.post(url, headers=headers, json=data)
-
+        response = requests.post(url, headers=headers, json={"ref": "main"})
         if response.status_code == 204:
             return True, "Workflow triggered successfully"
-        else:
-            return False, f"API returned status {response.status_code}"
-
+        return False, f"API returned status {response.status_code}"
     except Exception as e:
         return False, str(e)
 
@@ -155,43 +122,41 @@ def trigger_github_workflow():
 def check_workflow_status():
     """Check latest workflow run status"""
     try:
-        url = "https://api.github.com/repos/KoenigSalary/client_growth_report/actions/runs"
+        url = (
+            "https://api.github.com/repos/KoenigSalary/client_growth_report"
+            "/actions/runs"
+        )
         token = st.secrets.get("GITHUB_TOKEN", "")
-
         headers = {
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-
         response = requests.get(url, headers=headers, params={"per_page": 1})
-
         if response.status_code == 200:
             runs = response.json().get("workflow_runs", [])
             if runs:
                 return runs[0].get("status"), runs[0].get("conclusion")
-
         return None, None
-
     except Exception:
         return None, None
 
 
-def send_email_report(report_file_path, recipient_emails, exchange_rate):
+def send_email_report(report_file_path, recipient_emails):
     """Send email with report attachment via Outlook365"""
     try:
-        sender_email = st.secrets.get("SMTP_EMAIL", "")
+        sender_email    = st.secrets.get("SMTP_EMAIL", "")
         sender_password = st.secrets.get("SMTP_PASSWORD", "")
-        smtp_server = st.secrets.get("SMTP_SERVER", "smtp.office365.com")
-        smtp_port = int(st.secrets.get("SMTP_PORT", 587))
+        smtp_server     = st.secrets.get("SMTP_SERVER", "smtp.office365.com")
+        smtp_port       = int(st.secrets.get("SMTP_PORT", 587))
 
         if not sender_email or not sender_password:
             return False, "Email credentials not configured"
 
-        msg = MIMEMultipart()
-        msg["From"] = sender_email
-        msg["To"] = ", ".join(recipient_emails)
-        msg["Subject"] = f"Client Growth Report - {datetime.now().strftime('%Y-%m-%d')}"
+        msg             = MIMEMultipart()
+        msg["From"]     = sender_email
+        msg["To"]       = ", ".join(recipient_emails)
+        msg["Subject"]  = f"Client Growth Report - {datetime.now().strftime('%Y-%m-%d')}"
 
         body = f"""
 Hi Team,
@@ -200,7 +165,7 @@ Please find attached the Client Growth Report generated on {datetime.now().strft
 
 Report Summary:
 - Data Period: Previous 12M vs Current 12M
-- Exchange Rate: 1 USD = {exchange_rate:.2f} INR
+- Exchange Rate: 1 USD = 86 INR
 - High Growth Filter: Previous ≤$5K, Current ≥$50K
 
 Report includes 4 sheets:
@@ -211,15 +176,12 @@ Report includes 4 sheets:
 
 Best regards,
 Koenig Solutions Automated Report System
-        """
-
+"""
         msg.attach(MIMEText(body, "plain"))
 
-        # Attach Excel file
         with open(report_file_path, "rb") as attachment:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(attachment.read())
-
         encoders.encode_base64(part)
         part.add_header(
             "Content-Disposition",
@@ -227,122 +189,41 @@ Koenig Solutions Automated Report System
         )
         msg.attach(part)
 
-        # Send email
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(sender_email, sender_password)
-        text = msg.as_string()
-        server.sendmail(sender_email, recipient_emails, text)
+        server.sendmail(sender_email, recipient_emails, msg.as_string())
         server.quit()
-
         return True, f"Email sent to {len(recipient_emails)} recipient(s)"
-
     except Exception as e:
         return False, str(e)
 
 
-# 🆕 NEW: Updated to accept exchange_rate parameter
-def generate_report_with_email(file_24m_path, file_12m_path, source="manual", exchange_rate=86):
-    """Generate report and optionally send email"""
+def generate_report_with_email(file_24m_path, file_12m_path, source="manual"):
+    """Generate report from Excel files"""
     try:
         from process_report import process_growth_report
 
         df_24m = pd.read_excel(file_24m_path)
         df_12m = pd.read_excel(file_12m_path)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = Path("generated_reports")
         output_dir.mkdir(exist_ok=True)
         output_file = output_dir / f"Client_Growth_Report_{timestamp}.xlsx"
 
-        # 🆕 NEW: Pass exchange rate to process_growth_report
-        result = process_growth_report(df_24m, df_12m, str(output_file), exchange_rate)
+        result = process_growth_report(df_24m, df_12m, str(output_file))
 
         if output_file.exists():
             return True, output_file, result
-        else:
-            return False, None, {"error": "Report file not created"}
-
+        return False, None, {"error": "Report file not created"}
     except Exception as e:
         return False, None, {"error": str(e)}
 
 
-def send_reset_code_email(receiver_email, otp_code):
-    """Send a password reset code using Outlook SMTP."""
-    sender_email = st.secrets.get("SMTP_EMAIL", "")
-    sender_password = st.secrets.get("SMTP_PASSWORD", "")
-    smtp_server = st.secrets.get("SMTP_SERVER", "smtp.office365.com")
-    smtp_port = int(st.secrets.get("SMTP_PORT", 587))
-
-    if not sender_email or not sender_password:
-        return False, "SMTP credentials not configured"
-
-    subject = "Client Growth Report - Password Reset Code"
-    body = f"""
-Dear User,
-
-Your password reset code for the Client Growth Report dashboard is:
-
-    {otp_code}
-
-If you did not request this reset, you can ignore this email.
-
-Regards,
-Koenig Solutions Automated Report System
-"""
-
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-
-    context = ssl.create_default_context()
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls(context=context)
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, [receiver_email], msg.as_string())
-        return True, "Reset code sent successfully"
-    except Exception as e:
-        return False, str(e)
-
-
-# 🆕 NEW: Function to save exchange rate to .env file
-def save_exchange_rate_to_env(rate):
-    """Save exchange rate to .env file for persistence"""
-    env_path = Path(".env")
-    
-    try:
-        if env_path.exists():
-            # Read existing .env
-            with open(env_path, 'r') as f:
-                lines = f.readlines()
-            
-            # Update or add INR_TO_USD_RATE
-            updated = False
-            for i, line in enumerate(lines):
-                if line.startswith('INR_TO_USD_RATE='):
-                    lines[i] = f'INR_TO_USD_RATE={rate}\n'
-                    updated = True
-                    break
-            
-            if not updated:
-                lines.append(f'INR_TO_USD_RATE={rate}\n')
-            
-            # Write back
-            with open(env_path, 'w') as f:
-                f.writelines(lines)
-        else:
-            # Create new .env
-            with open(env_path, 'w') as f:
-                f.write(f'INR_TO_USD_RATE={rate}\n')
-        return True
-    except Exception as e:
-        print(f"Warning: Could not save exchange rate to .env: {e}")
-        return False
-
-
-# ----------------- LOGIN + FORGOT PASSWORD -----------------
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGIN + FORGOT PASSWORD  (simplified – no email required for reset)
+# ─────────────────────────────────────────────────────────────────────────────
 if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -350,7 +231,7 @@ if not st.session_state.authenticated:
         if os.path.exists(logo_path):
             st.image(logo_path, width=300)
 
-        # 1️⃣ NORMAL LOGIN
+        # ── NORMAL LOGIN ──────────────────────────────────────────────────────
         if st.session_state.reset_stage is None:
             st.markdown("### 🔐 Login Required")
 
@@ -374,105 +255,37 @@ if not st.session_state.authenticated:
                         st.error("❌ Invalid username or password. Please try again.")
 
             if st.button("Forgot Password?"):
-                st.session_state.reset_stage = "email"
+                st.session_state.reset_stage = "new_pw"
                 st.rerun()
 
             st.markdown("---")
 
-        # 2️⃣ STEP 1: ENTER EMAIL
-        elif st.session_state.reset_stage == "email":
-            st.markdown("### 🔄 Reset Password")
-            st.write("Enter your registered email address to receive a reset code.")
-
-            # Only this email is allowed to reset (or fallback to SMTP_EMAIL)
-            registered_email = st.secrets.get(
-                "RESET_EMAIL", st.secrets.get("SMTP_EMAIL", "")
-            )
-
-            email_input = st.text_input("Registered email")
-
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("Send Reset Code"):
-                    if not registered_email:
-                        st.error(
-                            "Reset email not configured. Please contact the administrator."
-                        )
-                    elif (
-                        email_input.strip().lower()
-                        != registered_email.strip().lower()
-                    ):
-                        st.error("This email is not registered for password reset.")
-                    else:
-                        otp_code = random.randint(100000, 999999)
-                        st.session_state.reset_otp = otp_code
-                        st.session_state.reset_email = registered_email
-
-                        ok, msg = send_reset_code_email(registered_email, otp_code)
-                        if ok:
-                            st.success("✅ Reset code sent to your email.")
-                            st.session_state.reset_stage = "otp"
-                            st.rerun()
-                        else:
-                            st.error(f"Failed to send email: {msg}")
-            with col_b:
-                if st.button("Back to Login"):
-                    st.session_state.reset_stage = None
-                    st.rerun()
-
-            st.markdown("---")
-
-        # 3️⃣ STEP 2: ENTER OTP
-        elif st.session_state.reset_stage == "otp":
-            st.markdown("### 🔑 Verify Reset Code")
-            st.write(
-                f"A 6-digit code has been sent to **{st.session_state.reset_email}**."
-            )
-
-            otp_input = st.text_input("Enter the 6-digit code")
-
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("Verify Code"):
-                    if otp_input.strip() == str(st.session_state.reset_otp):
-                        st.success(
-                            "✅ Code verified! Please set your new password below."
-                        )
-                        st.session_state.reset_stage = "new_pw"
-                        st.rerun()
-                    else:
-                        st.error("Invalid code. Please try again.")
-            with col_b:
-                if st.button("Back"):
-                    st.session_state.reset_stage = "email"
-                    st.rerun()
-
-            st.markdown("---")
-
-        # 4️⃣ STEP 3: SET NEW PASSWORD
+        # ── RESET PASSWORD (direct – no email gate) ───────────────────────────
         elif st.session_state.reset_stage == "new_pw":
             st.markdown("### 🔐 Set New Password")
-            st.write("Create a new password for the dashboard.")
+            st.info(
+                "Enter a new password below. No email verification is required."
+            )
 
-            new_pass = st.text_input("New Password", type="password")
-            confirm_pass = st.text_input("Confirm New Password", type="password")
+            new_pass     = st.text_input("New Password",     type="password", key="np1")
+            confirm_pass = st.text_input("Confirm Password", type="password", key="np2")
 
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("Update Password"):
-                    if not new_pass or not confirm_pass:
-                        st.error("Please enter and confirm the new password.")
+                if st.button("✅ Update Password"):
+                    if not new_pass:
+                        st.error("Please enter a new password.")
                     elif new_pass != confirm_pass:
                         st.error("Passwords do not match.")
+                    elif len(new_pass) < 6:
+                        st.error("Password must be at least 6 characters.")
                     else:
                         st.session_state.login_password = new_pass
-                        st.session_state.reset_stage = None
-                        st.session_state.reset_otp = None
-                        st.session_state.reset_email = None
+                        st.session_state.reset_stage    = None
                         st.success(
-                            "✅ Password updated successfully. Please login with your new password."
+                            "✅ Password updated! Please log in with your new password."
                         )
-                        time.sleep(1)
+                        time.sleep(1.5)
                         st.rerun()
             with col_b:
                 if st.button("Cancel"):
@@ -481,22 +294,20 @@ if not st.session_state.authenticated:
 
             st.markdown("---")
 
-    # Prevent rest of app from rendering until logged in
-    st.stop()
+    st.stop()  # Don't render the rest of the app until logged in
 
-# ----------------- MAIN APPLICATION -----------------
 
-# Header
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN APPLICATION
+# ─────────────────────────────────────────────────────────────────────────────
+
 col1, col2 = st.columns([3, 1])
 with col1:
     st.title("📊 Client Growth Report")
     st.markdown("**Powered by Koenig Solutions**")
-with col2:
-    st.markdown("### ")
-
 st.markdown("---")
 
-# Sidebar
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     logo_path = "assets/koenig_logo.png"
     if os.path.exists(logo_path):
@@ -504,26 +315,23 @@ with st.sidebar:
 
     st.markdown("### Options")
 
-    # Check if auto-downloaded files exist
     auto_files_exist = (
         Path("data/RCB_24months.xlsx").exists()
         and Path("data/RCB_12months.xlsx").exists()
     )
 
     if auto_files_exist:
-        options = ["🤖 Use Auto-Downloaded Data", "📥 Manual Upload"]
+        options        = ["🤖 Use Auto-Downloaded Data", "📥 Manual Upload"]
         default_option = 0
     else:
-        options = ["📥 Manual Upload"]
+        options        = ["📥 Manual Upload"]
         default_option = 0
 
     option = st.radio("Select Mode:", options, index=default_option)
 
-    # Data freshness indicator
     if auto_files_exist:
         st.markdown("---")
         st.markdown("### 📊 Data Status")
-
         last_update_24m = datetime.fromtimestamp(
             Path("data/RCB_24months.xlsx").stat().st_mtime
         )
@@ -531,9 +339,7 @@ with st.sidebar:
             Path("data/RCB_12months.xlsx").stat().st_mtime
         )
         last_update = max(last_update_24m, last_update_12m)
-
-        hours_ago = (datetime.now() - last_update).total_seconds() / 3600
-
+        hours_ago   = (datetime.now() - last_update).total_seconds() / 3600
         if hours_ago < 24:
             st.success(f"✅ Fresh: {hours_ago:.1f}h ago")
         elif hours_ago < 168:
@@ -541,39 +347,9 @@ with st.sidebar:
         else:
             st.warning(f"⚠️ Old: {hours_ago/24:.1f}d ago")
 
-    # 🆕 NEW: Exchange Rate Settings Section
-    st.markdown("---")
-    st.markdown("### 💱 Exchange Rate Settings")
-    
-    # Display current rate and allow adjustment
-    current_rate = st.session_state.inr_to_usd_rate
-    
-    new_rate = st.number_input(
-        "INR to USD Rate",
-        min_value=50.0,
-        max_value=150.0,
-        value=current_rate,
-        step=0.5,
-        format="%.2f",
-        help="Current exchange rate: 1 USD = X INR\nUpdate this when rates change."
-    )
-    
-    # Check if rate changed
-    if new_rate != current_rate:
-        st.session_state.inr_to_usd_rate = new_rate
-        save_exchange_rate_to_env(new_rate)
-        st.success(f"✅ Exchange rate updated to 1 USD = {new_rate:.2f} INR")
-        st.rerun()
-    
-    # Show conversion example
-    st.caption(f"Example: ₹{new_rate * 1000:,.0f} INR = $1,000 USD")
-    st.caption(f"Example: ₹{new_rate * 10000:,.0f} INR = $10,000 USD")
-
-    # GitHub Actions trigger
     if auto_files_exist or st.secrets.get("GITHUB_TOKEN"):
         st.markdown("---")
         st.markdown("### 🔄 Auto-Download")
-
         if st.button("🚀 Run Full Automation", key="full_auto", use_container_width=True):
             st.session_state.run_full_automation = True
             st.rerun()
@@ -581,9 +357,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### About")
     st.info(
-        f"""
-**Current Exchange Rate:** 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
-
+        """
 **High Growth Filter:**
 - Previous ≤ $5,000
 - Current ≥ $50,000
@@ -595,54 +369,44 @@ with st.sidebar:
 4. Exceptions
 """
     )
-
     st.markdown("---")
     if st.button("🚪 Logout", key="logout"):
         st.session_state.authenticated = False
         st.rerun()
 
-# Main content area
+
+# ── FULL AUTOMATION FLOW ──────────────────────────────────────────────────────
 if st.session_state.get("run_full_automation", False):
     st.header("🚀 Full Automation in Progress")
-
     progress_bar = st.progress(0)
-    status_text = st.empty()
+    status_text  = st.empty()
 
-    # Step 1: Trigger workflow
     status_text.info("📡 Step 1/5: Triggering GitHub Actions workflow...")
     progress_bar.progress(10)
     time.sleep(1)
 
     success, message = trigger_github_workflow()
-
     if success:
         status_text.success("✅ Step 1/5: Workflow triggered successfully!")
         time.sleep(2)
 
-        # Step 2: Wait for download
         status_text.info("⬇️ Step 2/5: Downloading data from RMS2... (2-3 minutes)")
         progress_bar.progress(30)
 
-        max_wait = 180  # 3 minutes
-        waited = 0
-
+        max_wait, waited = 180, 0
         while waited < max_wait:
-            workflow_status, conclusion = check_workflow_status()
-
-            if workflow_status == "completed":
+            wf_status, conclusion = check_workflow_status()
+            if wf_status == "completed":
                 if conclusion == "success":
                     status_text.success("✅ Step 2/5: Data downloaded successfully!")
                     break
                 else:
-                    status_text.error(
-                        "❌ Step 2/5: Download failed. Check GitHub Actions logs."
-                    )
+                    status_text.error("❌ Step 2/5: Download failed. Check GitHub Actions logs.")
                     st.markdown(
                         "[View GitHub Actions →](https://github.com/KoenigSalary/client_growth_report/actions)"
                     )
                     st.session_state.run_full_automation = False
                     st.stop()
-
             time.sleep(10)
             waited += 10
             progress_bar.progress(30 + int((waited / max_wait) * 30))
@@ -650,7 +414,6 @@ if st.session_state.get("run_full_automation", False):
         progress_bar.progress(60)
         time.sleep(2)
 
-        # Step 3: Validate data
         status_text.info("✅ Step 3/5: Validating downloaded data...")
         progress_bar.progress(70)
         time.sleep(1)
@@ -663,17 +426,13 @@ if st.session_state.get("run_full_automation", False):
             st.stop()
 
         time.sleep(1)
-
-        # Step 4: Generate report
         status_text.info("📊 Step 4/5: Generating growth report...")
         progress_bar.progress(80)
 
-        # 🆕 NEW: Pass exchange rate to report generation
         success, report_file, result = generate_report_with_email(
             Path("data/RCB_24months.xlsx"),
             Path("data/RCB_12months.xlsx"),
             "auto",
-            st.session_state.inr_to_usd_rate  # Pass current rate
         )
 
         if success:
@@ -681,16 +440,14 @@ if st.session_state.get("run_full_automation", False):
             progress_bar.progress(90)
             time.sleep(1)
 
-            # Step 5: Send email
             status_text.info("📧 Step 5/5: Sending email notification...")
-
-            recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
-            recipient_emails = [email.strip() for email in recipient_emails if email.strip()]
-
+            recipient_emails = [
+                e.strip()
+                for e in st.secrets.get("REPORT_RECIPIENTS", "").split(",")
+                if e.strip()
+            ]
             if recipient_emails:
-                # 🆕 NEW: Pass exchange rate to email
-                email_success, email_message = send_email_report(report_file, recipient_emails, st.session_state.inr_to_usd_rate)
-
+                email_success, email_message = send_email_report(report_file, recipient_emails)
                 if email_success:
                     status_text.success(f"✅ Step 5/5: {email_message}")
                 else:
@@ -700,38 +457,29 @@ if st.session_state.get("run_full_automation", False):
 
             progress_bar.progress(100)
             time.sleep(1)
-
             st.balloons()
-            st.markdown(
-                f"""
-🎉 Automation Completed Successfully!
-
-- ✅ Data downloaded from RMS2  
-- ✅ Data validated  
-- ✅ Report generated (**{result.get('total_clients', 0)}** clients)  
-- ✅ Email sent to {len(recipient_emails)} recipient(s)
-- 💱 Exchange rate used: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
-""",
-                unsafe_allow_html=True,
+            st.success(
+                f"🎉 Automation Complete! "
+                f"✅ {result.get('total_clients', 0)} clients | "
+                f"✅ Email sent to {len(recipient_emails)} recipient(s)"
             )
-
             with open(report_file, "rb") as f:
                 st.download_button(
-                    label="📥 Download Excel Report",
-                    data=f,
-                    file_name=report_file.name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "📥 Download Excel Report", f, report_file.name,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="download_auto",
                 )
         else:
             status_text.error(
-                f"❌ Step 4/5: Report generation failed - {result.get('error', 'Unknown error')}"
+                f"❌ Step 4/5: Report generation failed - {result.get('error', 'Unknown')}"
             )
     else:
         status_text.error(f"❌ Step 1/5: Failed to trigger workflow - {message}")
 
     st.session_state.run_full_automation = False
 
+
+# ── AUTO-DOWNLOADED DATA ──────────────────────────────────────────────────────
 elif option == "🤖 Use Auto-Downloaded Data":
     st.header("🤖 Use Auto-Downloaded Data")
 
@@ -739,175 +487,116 @@ elif option == "🤖 Use Auto-Downloaded Data":
     file_12m_path = Path("data/RCB_12months.xlsx")
 
     if file_24m_path.exists() and file_12m_path.exists():
-        last_update_24m = datetime.fromtimestamp(file_24m_path.stat().st_mtime)
-        last_update_12m = datetime.fromtimestamp(file_12m_path.stat().st_mtime)
-        last_update = max(last_update_24m, last_update_12m)
-
-        st.markdown(
-            f"""
-✅ Data files available  
-Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}
-
-- RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)  
-- RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)
-
-💱 Current exchange rate: **1 USD = {st.session_state.inr_to_usd_rate:.2f} INR**
-""",
-            unsafe_allow_html=True,
+        last_update = max(
+            datetime.fromtimestamp(file_24m_path.stat().st_mtime),
+            datetime.fromtimestamp(file_12m_path.stat().st_mtime),
         )
-
+        st.info(
+            f"✅ Data files available — Last updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')}  \n"
+            f"- RCB_24months.xlsx ({file_24m_path.stat().st_size / 1024 / 1024:.1f} MB)  \n"
+            f"- RCB_12months.xlsx ({file_12m_path.stat().st_size / 1024 / 1024:.1f} MB)"
+        )
         st.markdown("---")
-
-        # 🆕 NEW: Show warning if rate is unusual
-        if st.session_state.inr_to_usd_rate < 60 or st.session_state.inr_to_usd_rate > 100:
-            st.warning(f"⚠️ Exchange rate ({st.session_state.inr_to_usd_rate:.2f}) is outside typical range (60-100). Please verify the rate is correct.")
 
         if st.button("📊 Generate Report & Send Email", key="generate_auto"):
             with st.spinner("Generating report..."):
-                # 🆕 NEW: Pass exchange rate
                 success, report_file, result = generate_report_with_email(
-                    file_24m_path, 
-                    file_12m_path, 
-                    "auto",
-                    st.session_state.inr_to_usd_rate
+                    file_24m_path, file_12m_path, "auto"
                 )
-
                 if success:
                     st.success(
-                        f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed (using rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR)"
+                        f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed"
                     )
-
-                    recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
                     recipient_emails = [
-                        email.strip() for email in recipient_emails if email.strip()
+                        e.strip()
+                        for e in st.secrets.get("REPORT_RECIPIENTS", "").split(",")
+                        if e.strip()
                     ]
-
                     if recipient_emails:
-                        # 🆕 NEW: Pass exchange rate to email
-                        email_success, email_message = send_email_report(
-                            report_file, recipient_emails, st.session_state.inr_to_usd_rate
-                        )
-                        if email_success:
-                            st.success(f"📧 {email_message}")
-                        else:
-                            st.warning(f"⚠️ Email failed: {email_message}")
+                        ok, msg = send_email_report(report_file, recipient_emails)
+                        st.success(f"📧 {msg}") if ok else st.warning(f"⚠️ Email failed: {msg}")
 
                     with open(report_file, "rb") as f:
                         st.download_button(
-                            label="📥 Download Excel Report",
-                            data=f,
-                            file_name=report_file.name,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "📥 Download Excel Report", f, report_file.name,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
                 else:
-                    st.error(
-                        f"❌ Report generation failed: {result.get('error', 'Unknown error')}"
-                    )
+                    st.error(f"❌ {result.get('error', 'Unknown error')}")
     else:
         st.warning(
-            "⚠️ Auto-downloaded data files not found. Please use Manual Upload mode or trigger auto-download from sidebar."
+            "⚠️ Auto-downloaded data files not found. "
+            "Use Manual Upload or trigger auto-download from the sidebar."
         )
 
-else:  # Manual Upload
+
+# ── MANUAL UPLOAD ─────────────────────────────────────────────────────────────
+else:
     st.header("📥 Manual Upload")
-
     st.markdown(
-        f"""
-Instructions:
-
-1. Download **RCB_24months.xlsx** and **RCB_12months.xlsx** from RMS2  
-2. Upload both files below  
-3. Click **"Generate Report & Send Email"**
-
-💱 Current exchange rate: **1 USD = {st.session_state.inr_to_usd_rate:.2f} INR**  
-   (You can change this in the sidebar if needed)
-""",
-        unsafe_allow_html=True,
+        """
+1. Download **RCB_24months.xlsx** and **RCB_12months.xlsx** from RMS2
+2. Upload both files below
+3. Click **Generate Report**
+"""
     )
 
     col1, col2 = st.columns(2)
-
     with col1:
         st.subheader("24-Month Data")
-        file_24m = st.file_uploader(
-            "Upload RCB_24months.xlsx", type=["xlsx"], key="file_24m"
-        )
+        file_24m = st.file_uploader("Upload RCB_24months.xlsx", type=["xlsx"], key="file_24m")
         if file_24m:
             st.success(f"✅ {file_24m.name} ({file_24m.size / 1024 / 1024:.1f} MB)")
-
     with col2:
         st.subheader("12-Month Data")
-        file_12m = st.file_uploader(
-            "Upload RCB_12months.xlsx", type=["xlsx"], key="file_12m"
-        )
+        file_12m = st.file_uploader("Upload RCB_12months.xlsx", type=["xlsx"], key="file_12m")
         if file_12m:
             st.success(f"✅ {file_12m.name} ({file_12m.size / 1024 / 1024:.1f} MB)")
 
     st.markdown("---")
 
-    if st.button(
-        "📊 Generate Report & Send Email",
-        key="generate_manual",
-        disabled=not (file_24m and file_12m),
-    ):
+    if st.button("📊 Generate Report & Send Email", key="generate_manual",
+                 disabled=not (file_24m and file_12m)):
         data_dir = Path("data")
         data_dir.mkdir(exist_ok=True)
 
         temp_24m = data_dir / "temp_RCB_24months.xlsx"
-        with open(temp_24m, "wb") as f:
-            f.write(file_24m.getbuffer())
-
         temp_12m = data_dir / "temp_RCB_12months.xlsx"
-        with open(temp_12m, "wb") as f:
-            f.write(file_12m.getbuffer())
+        with open(temp_24m, "wb") as f: f.write(file_24m.getbuffer())
+        with open(temp_12m, "wb") as f: f.write(file_12m.getbuffer())
 
-        with st.spinner(f"Generating report using exchange rate 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR..."):
-            # 🆕 NEW: Pass exchange rate
+        with st.spinner("Generating report..."):
             success, report_file, result = generate_report_with_email(
-                temp_24m, 
-                temp_12m, 
-                "manual",
-                st.session_state.inr_to_usd_rate
+                temp_24m, temp_12m, "manual"
             )
-
             if success:
                 st.success(
-                    f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed (using rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR)"
+                    f"✅ Report generated: {result.get('total_clients', 0)} clients analyzed"
                 )
-
-                recipient_emails = st.secrets.get("REPORT_RECIPIENTS", "").split(",")
                 recipient_emails = [
-                    email.strip() for email in recipient_emails if email.strip()
+                    e.strip()
+                    for e in st.secrets.get("REPORT_RECIPIENTS", "").split(",")
+                    if e.strip()
                 ]
-
                 if recipient_emails:
-                    # 🆕 NEW: Pass exchange rate to email
-                    email_success, email_message = send_email_report(
-                        report_file, recipient_emails, st.session_state.inr_to_usd_rate
-                    )
-                    if email_success:
-                        st.success(f"📧 {email_message}")
-                    else:
-                        st.warning(f"⚠️ Email failed: {email_message}")
+                    ok, msg = send_email_report(report_file, recipient_emails)
+                    st.success(f"📧 {msg}") if ok else st.warning(f"⚠️ Email failed: {msg}")
 
                 with open(report_file, "rb") as f:
                     st.download_button(
-                        label="📥 Download Excel Report",
-                        data=f,
-                        file_name=report_file.name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "📥 Download Excel Report", f, report_file.name,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
             else:
-                st.error(
-                    f"❌ Report generation failed: {result.get('error', 'Unknown error')}"
-                )
+                st.error(f"❌ {result.get('error', 'Unknown error')}")
 
-# ----------------- FOOTER -----------------
+
+# ── FOOTER ────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    f"""
+    """
 <div style="text-align:center; font-size:0.9rem; color:grey;">
-Client Growth Report Generator v2.0 | © 2025 Koenig Solutions | Exchange Rate: 1 USD = {st.session_state.inr_to_usd_rate:.2f} INR
+Client Growth Report Generator v2.0 | © 2025 Koenig Solutions
 </div>
 """,
     unsafe_allow_html=True,

@@ -1,302 +1,472 @@
 """
-RMS2 Data Downloader - GitHub Actions Compatible
-Downloads both 24-month and 12-month data from RMS2
-Workflow: Type period → Apply Filters → Export Excel
+download_rms2_data.py  --  v5 FINAL
+
+Downloads RMS2 RCB reports for analysis:
+  - Last 24 months -> data/RCB_24months.xlsx
+  - Last 12 months -> data/RCB_12months.xlsx
+
+Flow (each download):
+  1. Login to RMS2
+  2. Navigate to RCB page
+  3. Set 'Last Months' input to 24 (or 12)
+  4. Click 'Apply Filters' (dark button, bottom-right of filter card)
+  5. Click 'Export Excel' (white button, top-right of header)
+  6. Save the downloaded .xlsx
+
+KEY ROBUSTNESS FEATURES:
+  - LABEL-aware Last Months detection (won't pick the search box by accident)
+  - Session-validity check before every step (fast-fail if redirected to login)
+  - Diagnostic dumps of all buttons + inputs on any failure
+  - Re-login between 24M and 12M downloads (in case session expires)
+  - NO Enter-key fallback (caused logouts in earlier versions)
+
+Required GitHub Secrets:
+  - RMS_USERNAME
+  - RMS_PASSWORD
 """
 
+from __future__ import annotations
+
 import os
-import time
-import asyncio
+import re
+import shutil
 from pathlib import Path
-from datetime import datetime
-from playwright.async_api import async_playwright
+
+from playwright.sync_api import Page, sync_playwright
 
 
-class RMS2Downloader:
-    def __init__(self, username, password, login_url, base_url, headless=True):
-        self.username = username
-        self.password = password
-        self.login_url = login_url
-        self.base_url = base_url
-        self.headless = headless
-        self.page = None
-        self.context = None
-        self.browser = None
-        self.playwright = None
+# ----------- Config -----------
+RMS_USERNAME  = os.getenv("RMS_USERNAME", "").strip()
+RMS_PASSWORD  = os.getenv("RMS_PASSWORD", "").strip()
+RMS_LOGIN_URL = os.getenv("RMS_LOGIN_URL", "https://rms2.koenig-solutions.com").strip()
+RCB_BASE_URL  = os.getenv("RCB_BASE_URL", "https://rms2.koenig-solutions.com/RCB").strip()
 
-    async def login(self):
-        """Login to RMS2"""
-        print(f"[{datetime.now()}] Logging in to RMS2...")
-        
-        await self.page.goto(self.login_url, timeout=60000)
-        await self.page.wait_for_load_state("networkidle")
-        
-        # Fill username and password
-        await self.page.fill("input[type='text']", self.username)
-        await self.page.fill("input[type='password']", self.password)
-        
-        # Click login button
-        await self.page.click("button:has-text('Login')", timeout=10000)
-        
-        await self.page.wait_for_load_state("networkidle")
-        await asyncio.sleep(3)
-        
-        print(f"[{datetime.now()}] ✓ Login successful!")
-        return True
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
 
-    async def navigate_to_rcb(self):
-        """Navigate to RCB page"""
-        print(f"[{datetime.now()}] Navigating to RCB page...")
-        await self.page.goto(self.base_url, timeout=60000)
-        await self.page.wait_for_load_state("networkidle")
-        await asyncio.sleep(3)
-        
-        # Take screenshot of RCB page for debugging
-        screenshot_path = f"data/rcb_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        await self.page.screenshot(path=screenshot_path)
-        print(f"[{datetime.now()}] RCB page screenshot saved: {screenshot_path}")
-        
-        print(f"[{datetime.now()}] ✓ At RCB page")
+FILE_24M = DATA_DIR / "RCB_24months.xlsx"
+FILE_12M = DATA_DIR / "RCB_12months.xlsx"
 
-    async def download_period_data(self, period_value, output_filename):
-        """
-        Download data for a specific period
-        Steps:
-        1. Clear and type the period value (12 or 24) into the input field
-        2. Click "Apply Filters" button
-        3. Click "Export Excel" button and download
-        """
-        print(f"\n[{datetime.now()}] {'='*50}")
-        print(f"[{datetime.now()}] DOWNLOADING {period_value}-MONTH DATA")
-        print(f"[{datetime.now()}] Saving to: {output_filename}")
-        print(f"[{datetime.now()}] {'='*50}")
-        
-        # Step 1: Find and clear the period input field
-        # The input has placeholder="12" and type="text"
-        print(f"[{datetime.now()}] Step 1: Finding period input field...")
-        
-        period_input_selectors = [
-            "input[placeholder='12']",
-            "input[placeholder='24']",
-            "input[type='text'][class*='MuiOutlinedInput-input']",
-            ".MuiOutlinedInput-input",
-            "input[class*='MuiInputBase-input']",
-        ]
-        
-        period_input = None
-        for selector in period_input_selectors:
-            try:
-                element = await self.page.query_selector(selector)
-                if element:
-                    period_input = element
-                    print(f"[{datetime.now()}] ✓ Found period input with selector: {selector}")
-                    break
-            except:
-                continue
-        
-        if not period_input:
-            # Try to find by placeholder text
-            print(f"[{datetime.now()}] Looking for input with placeholder containing number...")
-            all_inputs = await self.page.query_selector_all("input[type='text']")
-            for inp in all_inputs:
-                placeholder = await inp.get_attribute("placeholder") or ""
-                if placeholder.isdigit() or placeholder in ["12", "24"]:
-                    period_input = inp
-                    print(f"[{datetime.now()}] ✓ Found period input with placeholder='{placeholder}'")
-                    break
-        
-        if not period_input:
-            print(f"[{datetime.now()}] ❌ Could not find period input field!")
-            # Dump all inputs for debugging
-            all_inputs = await self.page.query_selector_all("input")
-            print(f"[{datetime.now()}] All input fields found:")
-            for i, inp in enumerate(all_inputs):
-                inp_type = await inp.get_attribute("type") or ""
-                inp_placeholder = await inp.get_attribute("placeholder") or ""
-                inp_class = await inp.get_attribute("class") or ""
-                print(f"  Input {i}: type='{inp_type}', placeholder='{inp_placeholder}', class='{inp_class[:50]}'")
-            return False
-        
-        # Clear and fill the period input
+HEADLESS = os.getenv("HEADLESS", "true").lower() != "false"
+SLOW_MO  = int(os.getenv("SLOW_MO", "0"))
+
+
+# ----------- Helpers -----------
+def require_env() -> None:
+    if not RMS_USERNAME:
+        raise ValueError("RMS_USERNAME secret is missing.")
+    if not RMS_PASSWORD:
+        raise ValueError("RMS_PASSWORD secret is missing.")
+
+
+def screenshot(page: Page, name: str) -> None:
+    path = DATA_DIR / name
+    try:
+        page.screenshot(path=str(path), full_page=True)
+        print(f"Saved screenshot: {path}")
+    except Exception as exc:
+        print(f"Could not save screenshot {path}: {exc}")
+
+
+def fill_first_available(page: Page, selectors, value: str, label: str,
+                         timeout: int = 7000) -> bool:
+    for selector in selectors:
         try:
-            await period_input.fill("")
-            await asyncio.sleep(0.5)
-            await period_input.fill(str(period_value))
-            print(f"[{datetime.now()}] ✓ Set period to: {period_value}")
-            await asyncio.sleep(1)
-        except Exception as e:
-            print(f"[{datetime.now()}] ❌ Failed to set period value: {e}")
-            return False
-        
-        # Step 2: Click "Apply Filters" button
-        print(f"[{datetime.now()}] Step 2: Clicking 'Apply Filters' button...")
-        
-        apply_filters_selectors = [
-            "button:has-text('Apply Filters')",
-            "button.rcb-apply-btn",
-            "button:has-text('Apply')",
-            "button:has-text('Filter')",
-            ".rcb-apply-btn",
-            "button[class*='apply']",
-        ]
-        
-        apply_clicked = False
-        for selector in apply_filters_selectors:
+            loc = page.locator(selector).first
+            loc.wait_for(state="visible", timeout=timeout)
+            loc.fill("")
+            loc.fill(value)
+            print(f"Filled {label} via: {selector}")
+            return True
+        except Exception:
+            continue
+    print(f"Could NOT fill {label}. Tried: {selectors}")
+    return False
+
+
+def click_first_available(page: Page, selectors, label: str,
+                          timeout: int = 7000) -> bool:
+    for selector in selectors:
+        try:
+            loc = page.locator(selector).first
+            loc.wait_for(state="visible", timeout=timeout)
+            loc.click()
+            print(f"Clicked {label} via: {selector}")
+            return True
+        except Exception:
+            continue
+    print(f"Could NOT click {label}. Tried: {selectors}")
+    return False
+
+
+def dump_all_buttons(page: Page, label: str) -> None:
+    try:
+        clickables = page.locator(
+            "button, a, input[type='button'], input[type='submit'], [role='button']"
+        )
+        n = clickables.count()
+        print(f"\n[{label}] DIAGNOSTIC -- Visible clickable elements ({n} total):")
+        shown = 0
+        for i in range(n):
             try:
-                element = await self.page.query_selector(selector)
-                if element:
-                    await self.page.click(selector, timeout=5000)
-                    print(f"[{datetime.now()}] ✓ Clicked 'Apply Filters' using: {selector}")
-                    apply_clicked = True
+                el = clickables.nth(i)
+                if not el.is_visible():
+                    continue
+                txt = (el.inner_text() or "").strip().replace("\n", " ")[:50]
+                val = (el.get_attribute("value") or "").strip()[:30]
+                cls = (el.get_attribute("class") or "").strip()[:60]
+                ide = (el.get_attribute("id") or "").strip()[:30]
+                tag = el.evaluate("el => el.tagName.toLowerCase()")
+                print(f"  [{i}] <{tag}> text='{txt}'  value='{val}'  id='{ide}'  class='{cls}'")
+                shown += 1
+                if shown >= 40:
+                    print(f"  ... ({n - i - 1} more not shown)")
                     break
-            except:
+            except Exception:
                 continue
-        
-        if not apply_clicked:
-            print(f"[{datetime.now()}] ❌ Could not find 'Apply Filters' button!")
-            # Dump all buttons for debugging
-            all_buttons = await self.page.query_selector_all("button")
-            print(f"[{datetime.now()}] All buttons found:")
-            for i, btn in enumerate(all_buttons):
-                btn_text = await btn.text_content() or ""
-                btn_class = await btn.get_attribute("class") or ""
-                print(f"  Button {i}: text='{btn_text[:30]}', class='{btn_class[:50]}'")
-            return False
-        
-        # Wait for data to load after applying filters
-        print(f"[{datetime.now()}] Waiting for data to load...")
-        await asyncio.sleep(5)
-        
-        # Step 3: Click "Export Excel" button and download
-        print(f"[{datetime.now()}] Step 3: Clicking 'Export Excel' button...")
-        
-        export_selectors = [
-            "button:has-text('Export Excel')",
-            "button:has-text('Export')",
-            ".rcb-header-btn",
-            "button[class*='rcb-header-btn']",
-            "button:has-text('Excel')",
-            "button i.file.excel.outline.icon",
-        ]
-        
-        for selector in export_selectors:
+        print("")
+    except Exception as e:
+        print(f"[{label}] Could not dump buttons: {e}")
+
+
+def dump_all_inputs(page: Page, label: str) -> None:
+    try:
+        inputs = page.locator("input")
+        n = inputs.count()
+        print(f"\n[{label}] DIAGNOSTIC -- Visible input elements ({n} total):")
+        shown = 0
+        for i in range(n):
             try:
-                element = await self.page.query_selector(selector)
-                if element:
-                    print(f"[{datetime.now()}] Found export button with selector: {selector}")
-                    
-                    # Expect download and save
-                    async with self.page.context.expect_download(timeout=120000) as download_info:
-                        await self.page.click(selector, timeout=5000)
-                        print(f"[{datetime.now()}] Clicked export button, waiting for download...")
-                        
-                        download = await download_info.value
-                        suggested_filename = download.suggested_filename
-                        print(f"[{datetime.now()}] Suggested filename: {suggested_filename}")
-                        
-                        # Save with the specified output filename
-                        await download.save_as(output_filename)
-                        
-                        if Path(output_filename).exists():
-                            file_size = Path(output_filename).stat().st_size
-                            print(f"[{datetime.now()}] ✓ Downloaded: {output_filename} ({file_size:,} bytes)")
-                            return True
+                el = inputs.nth(i)
+                if not el.is_visible():
+                    continue
+                typ = (el.get_attribute("type") or "").strip()[:15]
+                nm  = (el.get_attribute("name") or "").strip()[:30]
+                ide = (el.get_attribute("id") or "").strip()[:30]
+                ph  = (el.get_attribute("placeholder") or "").strip()[:30]
+                val = (el.input_value() or "").strip()[:30]
+                cls = (el.get_attribute("class") or "").strip()[:50]
+                print(f"  [{i}] type='{typ}' name='{nm}' id='{ide}' placeholder='{ph}' value='{val}' class='{cls}'")
+                shown += 1
+                if shown >= 30:
                     break
-            except Exception as e:
-                print(f"  Export selector '{selector}' failed: {str(e)[:80]}")
+            except Exception:
                 continue
-        
-        print(f"[{datetime.now()}] ❌ Could not find 'Export Excel' button!")
+        print("")
+    except Exception as e:
+        print(f"[{label}] Could not dump inputs: {e}")
+
+
+def is_on_login_page(page: Page) -> bool:
+    """Detect if we're currently on (or got redirected to) the login page."""
+    try:
+        url = (page.url or "").lower()
+        if "login" in url or url.rstrip("/") == RMS_LOGIN_URL.rstrip("/").lower():
+            return True
+        # Login-page hallmark: password input visible AND only ~3 buttons
+        pw = page.locator("input[type='password']")
+        if pw.count() > 0:
+            try:
+                if pw.first.is_visible(timeout=500):
+                    return True
+            except Exception:
+                pass
+        return False
+    except Exception:
         return False
 
-    async def run(self):
-        """Main execution flow"""
+
+def ensure_logged_in(page: Page, label: str) -> None:
+    """If we're on the login page mid-workflow, log in again."""
+    if is_on_login_page(page):
+        print(f"[{label}] Session lost or expired -- attempting re-login...")
+        login(page)
+
+
+# ----------- Login -----------
+def login(page: Page) -> None:
+    print(f"Opening RMS login URL: {RMS_LOGIN_URL}")
+    page.goto(RMS_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_load_state("networkidle", timeout=60000)
+    page.wait_for_timeout(1500)
+    screenshot(page, "01_login_page.png")
+
+    username_selectors = [
+        "input[placeholder='Your Email']",
+        "input[placeholder*='Email' i]",
+        "input[name='UserName']", "input[name='username']",
+        "input[name='Email']",    "input[name='email']",
+        "input[type='email']",
+        "input[type='text']",
+        "#UserName", "#username", "#Email", "#email",
+    ]
+    password_selectors = [
+        "input[placeholder='Password']",
+        "input[name='Password']", "input[name='password']",
+        "input[type='password']",
+        "#Password", "#password",
+    ]
+    login_button_selectors = [
+        "button.ui.positive.button:has-text('Login')",
+        "button:has-text('Login')",
+        "button:has-text('Sign in')",
+        "button[type='submit']",
+        "input[type='submit']",
+        "input[value='Login']",
+    ]
+
+    if not fill_first_available(page, username_selectors, RMS_USERNAME, "username"):
+        dump_all_inputs(page, "login")
+        raise RuntimeError("Could not find username field on login page.")
+
+    if not fill_first_available(page, password_selectors, RMS_PASSWORD, "password"):
+        dump_all_inputs(page, "login")
+        raise RuntimeError("Could not find password field on login page.")
+
+    if not click_first_available(page, login_button_selectors, "Login button"):
+        dump_all_buttons(page, "login")
+        screenshot(page, "login_button_not_found_error.png")
+        raise RuntimeError("Could not find Login button on login page.")
+
+    # Wait for login to complete & session to settle
+    try:
+        page.wait_for_url(lambda u: "login" not in u.lower(), timeout=15000)
+    except Exception:
+        # Some apps don't redirect URL but do change content -- check below
+        pass
+
+    page.wait_for_load_state("networkidle", timeout=60000)
+    page.wait_for_timeout(3000)
+    screenshot(page, "02_after_login.png")
+
+    if is_on_login_page(page):
+        screenshot(page, "login_failed_still_on_login_page.png")
+        raise RuntimeError(
+            "Login failed -- still on login page after submitting credentials. "
+            "Check RMS_USERNAME / RMS_PASSWORD secrets."
+        )
+
+    print(f"Login successful. Current URL: {page.url}")
+
+
+# ----------- Navigation -----------
+def open_rcb_page(page: Page, label: str) -> None:
+    print(f"\nOpening RCB page: {RCB_BASE_URL}")
+    page.goto(RCB_BASE_URL, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_load_state("networkidle", timeout=60000)
+    page.wait_for_timeout(3000)
+    screenshot(page, f"03_{label}_rcb_page.png")
+
+    # If RMS2 redirected us back to login, re-authenticate and retry
+    if is_on_login_page(page):
+        print(f"[{label}] RCB page redirected to login. Re-logging in...")
+        login(page)
+        page.goto(RCB_BASE_URL, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_load_state("networkidle", timeout=60000)
+        page.wait_for_timeout(3000)
+        screenshot(page, f"03_{label}_rcb_page_retry.png")
+
+    if is_on_login_page(page):
+        raise RuntimeError(
+            "Cannot reach RCB page -- session keeps getting redirected to login. "
+            "User may lack RCB access or RMS2 requires extra verification."
+        )
+
+
+# ----------- Last Months input -----------
+def set_last_months(page: Page, months: int, label: str) -> None:
+    """
+    Find the 'Last Months' input via label-aware strategies.
+    DO NOT just pick input[type='text'] index 0 -- that's the search box.
+    """
+    print(f"\nSetting Last Months = {months}")
+    target_field = None
+
+    # Strategy 1: XPath using nearby 'Last Months' text/label
+    xpath_candidates = [
+        "//label[contains(normalize-space(.), 'Last Months')]/following::input[1]",
+        "//label[contains(normalize-space(.), 'Last Months')]/..//input",
+        "//*[contains(normalize-space(text()), 'Last Months')]/following::input[1]",
+        "//*[contains(normalize-space(text()), 'Last Months')]/..//input",
+        "//div[contains(normalize-space(.), 'Last Months')]//input[@type='text' or @type='number']",
+    ]
+    for xp in xpath_candidates:
         try:
-            print(f"[{datetime.now()}] ========================================")
-            print(f"[{datetime.now()}] Starting RMS2 Data Download")
-            print(f"[{datetime.now()}] ========================================")
-            
-            Path("data").mkdir(exist_ok=True)
-            
-            # Launch browser
-            print(f"[{datetime.now()}] Launching Chromium browser...")
-            self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,
-                args=['--disable-dev-shm-usage']
-            )
-            self.context = await self.browser.new_context()
-            self.page = await self.context.new_page()
-            print(f"[{datetime.now()}] ✓ Browser ready")
-            
-            # Login and navigate
-            await self.login()
-            await self.navigate_to_rcb()
-            
-            # Download 24-month data first
-            success_24 = await self.download_period_data(24, "data/RCB_24months.xlsx")
-            
-            if not success_24:
-                print(f"[{datetime.now()}] ⚠️ Failed to download 24-month data")
-            
-            # Wait between downloads
-            await asyncio.sleep(3)
-            
-            # Download 12-month data
-            success_12 = await self.download_period_data(12, "data/RCB_12months.xlsx")
-            
-            if not success_12:
-                print(f"[{datetime.now()}] ⚠️ Failed to download 12-month data")
-            
-            # Final summary
-            print(f"\n[{datetime.now()}] ========================================")
-            print(f"[{datetime.now()}] DOWNLOAD SUMMARY")
-            print(f"[{datetime.now()}] ========================================")
-            print(f"  24-month data: {'✅ SUCCESS' if success_24 else '❌ FAILED'}")
-            print(f"  12-month data: {'✅ SUCCESS' if success_12 else '❌ FAILED'}")
-            
-            # Verify files exist
-            print(f"\n[{datetime.now()}] Verifying downloaded files...")
-            for file in ["data/RCB_24months.xlsx", "data/RCB_12months.xlsx"]:
-                if Path(file).exists():
-                    size = Path(file).stat().st_size
-                    print(f"  ✅ {file} ({size:,} bytes)")
-                else:
-                    print(f"  ❌ {file} not found")
-            
-            if success_24 and success_12:
-                print(f"\n[{datetime.now()}] 🎉 ALL FILES DOWNLOADED SUCCESSFULLY!")
-                return True
-            else:
-                print(f"\n[{datetime.now()}] ⚠️ Some downloads failed. Check logs above.")
-                return False
-            
-        except Exception as e:
-            print(f"[{datetime.now()}] ❌ ERROR: {str(e)}")
-            if self.page:
-                screenshot_path = f"data/error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                await self.page.screenshot(path=screenshot_path)
-                print(f"[{datetime.now()}] Screenshot saved: {screenshot_path}")
+            loc = page.locator(xp).first
+            if loc.is_visible(timeout=2000):
+                loc.fill("")
+                loc.fill(str(months))
+                target_field = loc
+                print(f"Filled Last Months via label-XPath: {xp}")
+                break
+        except Exception:
+            continue
+
+    # Strategy 2: Attribute selectors
+    if target_field is None:
+        attr_selectors = [
+            "input[placeholder='Last Months']",
+            "input[placeholder*='Last Months' i]",
+            "input[placeholder*='Months' i]",
+            "input[name*='Month' i]",
+            "input[name*='LastMonth' i]",
+            "input[id*='Month' i]",
+            "input[id*='LastMonth' i]",
+        ]
+        for sel in attr_selectors:
+            try:
+                loc = page.locator(sel).first
+                if loc.is_visible(timeout=2000):
+                    loc.fill("")
+                    loc.fill(str(months))
+                    target_field = loc
+                    print(f"Filled Last Months via attribute: {sel}")
+                    break
+            except Exception:
+                continue
+
+    # Strategy 3: Scan inputs whose current value is EXACTLY '12' (RCB default)
+    # while excluding search/CCE/country/NR-amount fields
+    if target_field is None:
+        print("Falling back to value-scan for input containing exactly '12'...")
+        try:
+            inputs = page.locator("input[type='text'], input[type='number']")
+            n = inputs.count()
+            for i in range(n):
+                el = inputs.nth(i)
+                try:
+                    if not el.is_visible():
+                        continue
+                    v = el.input_value().strip()
+                    if v != "12":
+                        continue
+                    nm  = (el.get_attribute("name") or "").lower()
+                    ph  = (el.get_attribute("placeholder") or "").lower()
+                    ide = (el.get_attribute("id") or "").lower()
+                    haystack = nm + " " + ph + " " + ide
+                    if any(x in haystack for x in ["search", "cce", "country", "manager", "nr ", "amount"]):
+                        continue
+                    el.fill("")
+                    el.fill(str(months))
+                    target_field = el
+                    print(f"Filled Last Months via value-scan at input index {i} (name='{nm}', placeholder='{ph}', id='{ide}')")
+                    break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if target_field is None:
+        print(f"[{label}] CRITICAL: could not find Last Months field. Dumping all inputs:")
+        dump_all_inputs(page, label)
+        screenshot(page, f"{label}_last_months_not_found_error.png")
+        raise RuntimeError(f"Could not find Last Months field for {label}.")
+
+    page.wait_for_timeout(800)
+    screenshot(page, f"04_{label}_last_months_filled.png")
+
+
+# ----------- Apply Filters -----------
+def apply_filters(page: Page, label: str) -> None:
+    """The filter trigger is a DARK button labeled 'Apply Filters'."""
+    apply_selectors = [
+        "button:has-text('Apply Filters')",
+        "//button[normalize-space(.)='Apply Filters']",
+        "//button[contains(normalize-space(.), 'Apply Filters')]",
+        "input[value='Apply Filters']",
+        "a:has-text('Apply Filters')",
+        "[role='button']:has-text('Apply Filters')",
+    ]
+
+    if click_first_available(page, apply_selectors, f"{label} Apply Filters", timeout=10000):
+        page.wait_for_load_state("networkidle", timeout=60000)
+        page.wait_for_timeout(5000)
+        screenshot(page, f"05_{label}_after_apply_filters.png")
+        ensure_logged_in(page, label)
+        return
+
+    print(f"[{label}] Apply Filters button not found. Dumping diagnostics:")
+    dump_all_buttons(page, label)
+    dump_all_inputs(page, label)
+    screenshot(page, f"{label}_apply_filters_not_found_error.png")
+    raise RuntimeError(f"Could not find Apply Filters button for {label}.")
+
+
+# ----------- Export Excel -----------
+def export_excel(page: Page, output_path: Path, label: str) -> None:
+    """The export trigger is a WHITE button labeled 'Export Excel' in the header."""
+    ensure_logged_in(page, label)
+
+    export_selectors = [
+        "button:has-text('Export Excel')",
+        "//button[normalize-space(.)='Export Excel']",
+        "//button[normalize-space(text())='Export Excel']",
+        "a:has-text('Export Excel')",
+        "[role='button']:has-text('Export Excel')",
+        "input[value='Export Excel']",
+        "//button[contains(., 'Export Excel') and not(contains(., 'PPC'))]",
+        "//button[contains(., 'Export') and not(contains(., 'PPC')) and not(contains(., 'Median'))]",
+    ]
+
+    print(f"\n[{label}] Attempting Export Excel download...")
+    try:
+        with page.expect_download(timeout=180000) as download_info:
+            if not click_first_available(page, export_selectors,
+                                         f"{label} Export Excel", timeout=10000):
+                dump_all_buttons(page, label)
+                screenshot(page, f"{label}_export_excel_not_found_error.png")
+                raise RuntimeError(f"Could not find Export Excel button for {label}.")
+        download = download_info.value
+    except Exception as e:
+        dump_all_buttons(page, label)
+        screenshot(page, f"{label}_export_download_error.png")
+        raise RuntimeError(f"Export download failed for {label}: {e}")
+
+    temp_path = download.path()
+    if not temp_path:
+        raise RuntimeError(
+            f"Download failed for {label}. Suggested filename: {download.suggested_filename}"
+        )
+
+    output_path.parent.mkdir(exist_ok=True)
+    shutil.copy(temp_path, output_path)
+    size_mb = output_path.stat().st_size / 1024 / 1024
+    print(f"Saved {label}: {output_path} ({size_mb:.2f} MB)")
+
+
+# ----------- Orchestration -----------
+def download_rcb_report(page: Page, months: int, output_path: Path, label: str) -> None:
+    print(f"\n{'='*70}\nStarting {label} download (Last Months = {months})\n{'='*70}")
+    open_rcb_page(page, label)
+    set_last_months(page, months, label)
+    apply_filters(page, label)
+    export_excel(page, output_path, label)
+
+
+def main() -> None:
+    require_env()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_default_timeout(30000)
+        try:
+            login(page)
+            download_rcb_report(page, 24, FILE_24M, "RCB_24months")
+            download_rcb_report(page, 12, FILE_12M, "RCB_12months")
+        except Exception as exc:
+            print(f"\nFATAL ERROR: {exc}")
+            screenshot(page, "final_error.png")
             raise
         finally:
-            if self.browser:
-                await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()
+            context.close()
+            browser.close()
 
-
-def main():
-    username = os.environ.get("RMS_USERNAME")
-    password = os.environ.get("RMS_PASSWORD")
-    login_url = os.environ.get("RMS_LOGIN_URL", "https://rms2.koenig-solutions.com")
-    base_url = os.environ.get("RCB_BASE_URL", "https://rms2.koenig-solutions.com/RCB")
-    
-    if not username or not password:
-        raise ValueError("RMS_USERNAME and RMS_PASSWORD environment variables must be set")
-    
-    success = asyncio.run(RMS2Downloader(username, password, login_url, base_url, headless=True).run())
-    if not success:
-        exit(1)
+    print("\n" + "=" * 70)
+    print("RMS2 RCB downloads completed successfully!")
+    print(f"  24M file: {FILE_24M}")
+    print(f"  12M file: {FILE_12M}")
+    print("=" * 70)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import pandas as pd
 from datetime import datetime
 
 
-def process_growth_report(df_24m, df_12m, output_file, inr_to_usd_rate=86):
+def process_growth_report(df_24m, df_12m, output_file):
     """
     Process growth report from 24-month and 12-month DataFrames.
 
@@ -26,8 +26,7 @@ def process_growth_report(df_24m, df_12m, output_file, inr_to_usd_rate=86):
         dict: Summary statistics
     """
 
-    INR_TO_USD = inr_to_usd_rate  # Exchange rate passed from dashboard
-    print(f"[INFO] Using exchange rate: 1 USD = {INR_TO_USD} INR")
+    INR_TO_USD = 86  # Exchange rate
 
     # ──────────────────────────────────────────────────────
     # 1. Prepare 24-month dataframe

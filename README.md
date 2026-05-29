@@ -1,108 +1,144 @@
-# Client Growth Report — Dual-Mode v4.0
+# Client Growth Report — v5.0
 
-Two ways to run, one shared codebase. Use whichever is convenient.
+Automated monthly growth analysis for Koenig Solutions clients,
+with RMS2 OTP support.
 
-| | **Streamlit Cloud** (always-on URL) | **Local Computer** (run on demand) |
-|---|---|---|
-| What it does | View reports, upload files manually | **Download fresh data from RMS2 with OTP** + everything else |
-| OTP handling | Not possible (no browser to interact with) | ✅ Real Chromium window opens — you type OTP into RMS2 itself |
-| Best for | Day-to-day viewing, sharing reports | Monthly download on the 14th |
-| Setup | Push to GitHub, configure secrets | Double-click a launcher script |
+## 🗺️ Architecture
 
-The app **auto-detects** where it's running and shows the appropriate modes.
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  STREAMLIT CLOUD (shared URL for everyone)                          │
+│  https://clientgrowthreport-xxxx.streamlit.app                      │
+│  ───────────────────────────────────────                            │
+│  • Anyone can VIEW past reports                                     │
+│  • Download history (Excel files)                                   │
+│  • Mobile-friendly                                                  │
+│  • Login: admin / admin123                                          │
+└─────────────────────────────────────────────────────────────────────┘
+                                ↑
+                                │ Reads files committed to data/ and
+                                │ generated_reports/ in this git repo
+                                │
+┌─────────────────────────────────────────────────────────────────────┐
+│  YOUR LAPTOP (once per month, on the 14th)                          │
+│  ───────────────────────────────────────                            │
+│  Double-click  run_local_windows.bat   (Windows)                    │
+│             or run_local_mac_linux.sh  (Mac/Linux)                  │
+│                                                                     │
+│  This runs run_monthly.py which does END-TO-END:                    │
+│    1. Opens Chromium window                                         │
+│    2. Auto-fills RMS2 email + password                              │
+│    3. ⏸  You type the OTP into the Chromium window                 │
+│    4. Downloads 24-month + 12-month Excel from RMS2                 │
+│    5. Builds the 4-sheet growth report                              │
+│    6. Emails it (if SMTP configured)                                │
+│    7. Commits + pushes new files to git                             │
+│                                                                     │
+│  Total time: ~5 minutes (mostly waiting for downloads)              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 📦 What's in this repo
+
+| File / Folder | Purpose |
+|---|---|
+| `streamlit_app.py` | The Streamlit Cloud viewer dashboard |
+| `run_monthly.py` | End-to-end script that does the entire monthly job |
+| `rms2_downloader_local.py` | Playwright module: visible Chromium + RMS2 navigation |
+| `process_report.py` | Builds the 4-sheet Excel growth report |
+| `launchers/run_local_*` | One-click monthly run on Windows / Mac / Linux |
+| `launchers/view_reports_*` | One-click "view reports locally" (optional) |
+| `requirements.txt` | Python deps |
+| `packages.txt` | Empty (Streamlit Cloud doesn't need browser libs) |
+| `.env.example` | Template — copy to `.env` and fill in |
+| `data/` | RCB Excel files (committed to git after each local run) |
+| `generated_reports/` | Generated reports (committed to git after each local run) |
+| `assets/koenig_logo.png` | Branding |
 
 ---
 
-## 🖥️ Setup A — Run Locally (for RMS2 downloads)
+## 🚀 Setup (one-time, on your laptop)
 
 ### Prerequisites
 - **Python 3.10 or newer** ([download](https://python.org))
-- Internet access
+- **Git** ([download](https://git-scm.com))
 
-### One-Click Launch
+### Steps
 
-**Windows:**
-1. Double-click `launchers/run_local_windows.bat`
-2. Wait ~2-3 minutes on first run (installs dependencies + Chromium)
-3. Your browser opens to `http://localhost:8501`
+1. **Clone the repo to your laptop:**
+   ```bash
+   git clone https://github.com/KoenigSalary/client_growth_report.git
+   cd client_growth_report
+   ```
 
-**macOS / Linux:**
-1. Open Terminal in this folder
-2. Run: `./launchers/run_local_mac_linux.sh`
-3. Wait ~2-3 minutes on first run
-4. Your browser opens automatically
+2. **Create your `.env` file:**
+   ```bash
+   cp .env.example .env
+   ```
+   Then open `.env` in any text editor and fill in:
+   - `RMS_USERNAME` and `RMS_PASSWORD` (your RMS2 login)
+   - `SMTP_*` and `REPORT_RECIPIENTS` (optional, for auto-email)
+   - `AUTO_GIT_COMMIT=1` (so Streamlit Cloud sees new reports)
 
-### First-Time Setup: Save Credentials (Optional)
+3. **First-time install** — just double-click the launcher and let it auto-install:
+   - **Windows:** `launchers\run_local_windows.bat`
+   - **Mac/Linux:** `./launchers/run_local_mac_linux.sh`
+   - The launcher creates a venv, installs dependencies, downloads Chromium
 
-Copy `.env.example` to `.env` and fill in your RMS2 login:
-```
-RMS_USERNAME=your-email@koenig-solutions.com
-RMS_PASSWORD=your-rms2-password
-```
-(If you skip this, the app will ask for credentials in a form.)
-
-### Using Local Mode
-
-1. Open the app at `http://localhost:8501`
-2. Login: `admin` / `admin123`
-3. Sidebar shows three modes — pick **🌐 Local RMS2 Download (visible browser + OTP)**
-4. Click **▶️ Launch Browser & Start Login**
-5. A **Chromium window pops up**, automatically fills email + password, clicks Login
-6. RMS2 shows the OTP screen — **check your Outlook, then type the OTP directly into the Chromium window** and click Submit
-7. Streamlit detects you've authenticated and continues:
-   - Downloads 24-month data
-   - Downloads 12-month data
-   - Closes the browser
-8. Click **Generate Growth Report & Email**
-9. Done!
+That's it — first run takes ~3 minutes for installation, then proceeds.
 
 ---
 
-## ☁️ Setup B — Streamlit Cloud (for viewing & manual uploads)
+## 🗓️ Monthly Workflow
 
-### Push to GitHub
+Every 14th (or whenever you want fresh data):
 
-1. Upload all files in this repo to https://github.com/KoenigSalary/client_growth_report
-2. Streamlit Cloud auto-redeploys
+1. **Double-click** the launcher (`.bat` on Windows, `.sh` on Mac/Linux)
+2. **Watch** as a Chromium window pops up showing RMS2
+3. **Wait** until the email + password are auto-filled and you reach the OTP screen
+4. **Check Outlook** for the 6-digit code
+5. **Type the OTP** into the Chromium window's RMS2 OTP field, click Submit/Verify
+6. **Walk away** — the script handles everything else:
+   - Navigates to RCB page
+   - Filters 24 months, exports Excel
+   - Filters 12 months, exports Excel
+   - Closes browser
+   - Builds report
+   - Sends email
+   - Commits to git
+7. **Done!** ~5 minutes total.
 
-### Configure Secrets (Optional, for email)
-
-Streamlit Cloud → **Manage app → Settings → Secrets**:
-```toml
-SMTP_EMAIL        = "you@koenig-solutions.com"
-SMTP_PASSWORD     = "outlook-app-password"
-SMTP_SERVER       = "smtp.office365.com"
-SMTP_PORT         = "587"
-REPORT_RECIPIENTS = "boss@x.com,team@x.com"
-```
-
-### Using Cloud Mode
-
-- **📥 Manual Upload** — drag & drop the two RCB Excel files you downloaded from RMS2 (in your normal browser, with OTP), then click Generate Report
-- **🤖 Use Last Downloaded Files** — only works if files were synced to the `data/` folder
-
----
-
-## 📂 File Reference
-
-| File | Purpose |
-|------|---------|
-| `streamlit_app.py` | Dashboard — auto-detects environment |
-| `rms2_downloader_local.py` | Visible-Chromium downloader (local only) |
-| `process_report.py` | Builds the 4-sheet Excel output |
-| `requirements.txt` | Python deps |
-| `packages.txt` | Empty — no OS deps needed |
-| `launchers/run_local_windows.bat` | One-click launcher for Windows |
-| `launchers/run_local_mac_linux.sh` | One-click launcher for macOS/Linux |
-| `.env.example` | Template for local credentials |
+You can verify by:
+- Checking your Outlook for the report email
+- Refreshing the Streamlit Cloud URL (new report appears in history)
 
 ---
 
-## 🔑 Dashboard Login
+## ☁️ Streamlit Cloud Setup (one-time)
 
-- Username: `admin`
-- Password: `admin123`
-- "Forgot Password?" lets you set a new one without email verification
+The Streamlit Cloud app is **view-only** — colleagues can see past reports
+on any device. Setup:
+
+1. Push this repo to GitHub
+2. Connect it to Streamlit Cloud at https://share.streamlit.io
+3. Set the main file: `streamlit_app.py`
+4. **No secrets needed on Streamlit Cloud** — it only reads committed files
+
+The dashboard at `https://clientgrowthreport-xxxx.streamlit.app` will:
+- Show the latest report (downloadable)
+- Show the full report history
+- Display raw data file status
+- Provide instructions for the monthly run
+
+---
+
+## 🔐 Credentials Storage
+
+| Where | What | How |
+|---|---|---|
+| **Your laptop** | RMS2 + SMTP credentials | `.env` file (gitignored) |
+| **GitHub Secrets** | Not used (the local laptop is now in charge) | n/a |
+| **Streamlit Cloud Secrets** | Not used (cloud is view-only) | n/a |
 
 ---
 
@@ -118,7 +154,7 @@ REPORT_RECIPIENTS = "boss@x.com,team@x.com"
 Columns: `CorporateID`, `CompanyName`, `UserName`, `URL`,
 `Previous_12M_USD`, `Current_12M_USD`, `Growth_USD`, `Growth_%`
 
-Exchange rate: **1 USD = 86 INR** (edit in `process_report.py` if needed)
+Exchange rate: **1 USD = 86 INR** (edit `process_report.py` to change).
 
 ---
 
@@ -126,22 +162,19 @@ Exchange rate: **1 USD = 86 INR** (edit in `process_report.py` if needed)
 
 | Symptom | Fix |
 |---|---|
-| "Python not found" on Windows | Install Python 3.10+ from python.org; check "Add to PATH" |
-| `playwright install` fails | Run `python -m playwright install --with-deps chromium` manually |
-| Chromium window doesn't appear | Ensure you're running locally (not on Streamlit Cloud); badge in top-right should say 🖥️ LOCAL MODE |
-| OTP timeout | You have 5 minutes to type the OTP. Just click Cancel and try again. |
-| Wrong files in Last Downloaded | Run Local Mode again — files are auto-overwritten |
+| "Python not found" | Install Python 3.10+ from python.org, tick "Add to PATH" on Windows |
+| Chromium window doesn't appear | The launcher runs `playwright install chromium` first time — give it 2-3 min |
+| OTP timeout (5 min) | You missed it. Click Cancel in the script or just re-run the launcher |
+| "Cannot push to git" | `git remote set-url origin` with a token-authenticated URL, or set `AUTO_GIT_COMMIT=0` |
+| Streamlit Cloud doesn't show new report | Check that `AUTO_GIT_COMMIT=1` in `.env` AND `git push` worked from your laptop |
+| Email not sent | Check `SMTP_EMAIL`/`SMTP_PASSWORD` in `.env`; Outlook may need an "app password" |
 
 ---
 
-## 📅 Monthly Workflow
+## 💡 Tips
 
-1. Around the 14th, open your laptop
-2. Double-click `run_local_windows.bat` (or `.sh` on Mac/Linux)
-3. Wait for the Streamlit page to open
-4. Pick "🌐 Local RMS2 Download"
-5. Click Launch → OTP → wait → Generate Report
-6. Email is sent automatically (if configured)
-7. Total time: **~5 minutes**
-
-That's it. No more daily failed GitHub Actions runs.
+- **Calendar reminder**: set a recurring monthly reminder for the 14th
+- **Headless run**: if you want truly hands-free (no OTP), ask Koenig IT for
+  a service account that bypasses 2FA, then re-enable the GitHub Actions
+  workflow in `.github/workflows/`
+- **View on phone**: the Streamlit Cloud URL works on mobile browsers

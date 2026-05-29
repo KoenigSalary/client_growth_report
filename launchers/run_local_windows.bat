@@ -1,14 +1,22 @@
 @echo off
-REM ==============================================================
-REM Client Growth Report -- One-Click Local Launcher for Windows
-REM ==============================================================
-echo.
-echo ============================================================
-echo  Client Growth Report - Local Mode
-echo ============================================================
-echo.
+REM ============================================================
+REM Client Growth Report - Monthly Run (Windows)
+REM
+REM This script runs the end-to-end monthly job:
+REM   1. Opens Chromium (you enter OTP in it)
+REM   2. Downloads 24M + 12M from RMS2
+REM   3. Builds the Excel growth report
+REM   4. Emails it
+REM   5. Commits files to git so Streamlit Cloud sees them
+REM ============================================================
 
 cd /d "%~dp0\.."
+
+echo.
+echo ============================================================
+echo  Client Growth Report - Monthly Run
+echo ============================================================
+echo.
 
 REM Check Python
 python --version >nul 2>&1
@@ -18,27 +26,35 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Create venv if needed
+REM Create venv on first run
 if not exist ".venv\" (
-    echo [INFO] Creating virtual environment...
+    echo [INFO] First-time setup: creating virtual environment...
     python -m venv .venv
 )
 
 REM Activate venv
 call .venv\Scripts\activate.bat
 
-REM Install dependencies (only if not already installed)
+REM Install dependencies (silent if already installed)
 echo [INFO] Checking dependencies...
 pip install -q -r requirements.txt
+
+REM Install Chromium browser (first-time only takes ~2 min)
 python -m playwright install chromium
 
 echo.
 echo ============================================================
-echo  Starting Streamlit app... Browser will open automatically.
-echo  Press Ctrl+C in this window to stop the app.
+echo  Starting run_monthly.py
+echo  - A Chromium window will open
+echo  - Type the OTP from your Outlook when it appears
+echo  - Everything else is automatic
 echo ============================================================
 echo.
 
-streamlit run streamlit_app.py
+python run_monthly.py
 
+echo.
+echo ============================================================
+echo  Done! Press any key to close.
+echo ============================================================
 pause

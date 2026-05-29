@@ -301,9 +301,27 @@ if mode == "🌐 Live RMS2 Download (with OTP)":
     msg = session.message or ""
 
     if state == "logging_in":
-        with st.spinner("🔐 Logging in to RMS2..."):
-            st.info(msg)
-        time.sleep(2)
+        st.info(f"🔐 {msg}")
+        st.caption(
+            "If the OTP screen does not auto-appear within 30 seconds, "
+            "click the button below to manually open the OTP input."
+        )
+        col_lg1, col_lg2 = st.columns([1, 1])
+        with col_lg1:
+            if st.button("🔄 Refresh status", key="refresh_login"):
+                st.rerun()
+        with col_lg2:
+            if st.button("⚠️ Force OTP entry", key="force_otp",
+                         help="Use this if you received the OTP email but no OTP box appeared"):
+                # Manually transition the session into WAITING_FOR_OTP
+                session.state = session.STATE_WAITING_FOR_OTP
+                session.message = (
+                    "Force-enabled OTP entry. Enter the 6-digit code from "
+                    "your Outlook inbox below."
+                )
+                st.rerun()
+        # Auto-refresh after 5s so user does not have to spam Refresh
+        time.sleep(5)
         st.rerun()
 
     elif state == "waiting_for_otp":

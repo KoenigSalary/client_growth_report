@@ -152,28 +152,51 @@ class RMS2Session:
             "button[type='submit']",
         ], "Login")
 
+        # Wait LONGER for OTP screen to render (it can take 5-10s)
         page.wait_for_load_state("networkidle", timeout=60000)
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(5000)
         self._screenshot(page, "02_after_login.png")
 
-        # Did we get redirected to OTP screen?
-        if self._is_otp_screen(page):
+        # Dump page state so we can see what's actually there
+        self._dump_page_state(page, "after_login")
+
+        # Aggressively check for OTP screen multiple times with retries
+        # (the OTP page may take a few seconds to fully render)
+        otp_detected = False
+        for attempt in range(5):
+            if self._is_otp_screen(page):
+                otp_detected = True
+                break
+            page.wait_for_timeout(2000)
+
+        # If we still have a password field visible, login failed outright
+        if not otp_detected and self._has_password_input(page):
+            self._screenshot(page, "login_failed.png")
+            raise RuntimeError(
+                "Login failed -- still seeing password field after submitting. "
+                "Check RMS_USERNAME / RMS_PASSWORD in Streamlit secrets."
+            )
+
+        # Either we detected OTP screen, OR we're past it entirely (lucky session)
+        # If unsure (no password but no OTP-text either), still offer OTP entry
+        if otp_detected or self._looks_like_otp_screen_loosely(page):
             self.state = self.STATE_WAITING_FOR_OTP
             self.message = (
                 "OTP required! Check your Outlook inbox for the 6-digit code "
-                "sent by RMS2, then enter it in the box below."
+                "sent by RMS2, then enter it below."
             )
             otp_code = self._otp_queue.get()   # blocks until Streamlit submits
             self._submit_otp(page, otp_code)
             page.wait_for_load_state("networkidle", timeout=60000)
-            page.wait_for_timeout(2500)
+            page.wait_for_timeout(3000)
             self._screenshot(page, "03_after_otp.png")
 
         # Final check -- are we through?
-        if self._is_login_or_otp_screen(page):
+        if self._has_password_input(page) or self._is_otp_screen(page):
+            self._screenshot(page, "auth_failed_final.png")
             raise RuntimeError(
-                "Authentication failed -- still on login/OTP screen. "
-                "Possibly wrong OTP or credentials."
+                "Authentication failed -- still on login/OTP screen after submit. "
+                "Possibly wrong OTP or expired code."
             )
 
         self.state = self.STATE_AUTHENTICATED

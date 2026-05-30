@@ -13,7 +13,7 @@ import pandas as pd
 from datetime import datetime
 
 
-def process_growth_report(df_24m, df_12m, output_file):
+def process_growth_report(df_24m, df_12m, output_file, inr_to_usd: float = 86.0):
     """
     Process growth report from 24-month and 12-month DataFrames.
 
@@ -26,7 +26,7 @@ def process_growth_report(df_24m, df_12m, output_file):
         dict: Summary statistics
     """
 
-    INR_TO_USD = 86  # Exchange rate
+    INR_TO_USD = inr_to_usd  # Exchange rate
 
     # ──────────────────────────────────────────────────────
     # 1. Prepare 24-month dataframe
@@ -55,8 +55,8 @@ def process_growth_report(df_24m, df_12m, output_file):
     # 3. Merge on CorporateID
     # ──────────────────────────────────────────────────────
     merged = pd.merge(df_24m_prep, df_12m_prep, on='CorporateID', how='outer')
-    merged['24_Month_Revenue'].fillna(0, inplace=True)
-    merged['12_Month_Revenue'].fillna(0, inplace=True)
+    merged['24_Month_Revenue'] = merged['24_Month_Revenue'].fillna(0)
+    merged['12_Month_Revenue'] = merged['12_Month_Revenue'].fillna(0)
 
     # ──────────────────────────────────────────────────────
     # 4. Calculate metrics
@@ -105,7 +105,7 @@ def process_growth_report(df_24m, df_12m, output_file):
             lambda r: r['URL_curr']
             if pd.notna(r['URL_curr']) and str(r['URL_curr']).strip() != ''
             else (
-                f"https://rms2.koenig-solutions.com/corporate/{r['CorporateID']}"
+                f"https://rms2.koenig-solutions.com/corporate/{str(r['CorporateID'])}"
                 if pd.notna(r['CorporateID']) else ''
             ),
             axis=1
@@ -164,7 +164,7 @@ def process_growth_report(df_24m, df_12m, output_file):
     print(f"[INFO] High Growth (Prev<=$5K → Curr>=$50K): {len(high_growth)} clients")
     if len(high_growth) > 0:
         for _, r in high_growth.head(5).iterrows():
-            print(f"       {r['CompanyName']:40s}  Prev:${r['Previous_12M_USD']:>8,}  Curr:${r['Current_12M_USD']:>10,}")
+            print(f"       {r['CompanyName']:40}  Prev:${r['Previous_12M_USD']:>8,}  Curr:${r['Current_12M_USD']:>10,}")
 
     # ──────────────────────────────────────────────────────
     # 12. Build Exceptions sheet

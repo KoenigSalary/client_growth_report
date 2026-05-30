@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.streamlit/secrets.toml
+
+# Generated / runtime data (these come from running the script)
+data/*.xlsx
+data/*.png
+generated_reports/*.xlsx
+
+# Backups
+*.bak
+*.bak2
+*.tmp
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

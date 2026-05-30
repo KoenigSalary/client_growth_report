@@ -195,7 +195,9 @@ def main():
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = Path("generated_reports"); out_dir.mkdir(exist_ok=True)
         report_path = out_dir / f"Client_Growth_Report_{ts}.xlsx"
-        result = process_growth_report(df24, df12, str(report_path))
+        rate = float(os.environ.get("INR_TO_USD", "86"))
+        print(f"   Using exchange rate: 1 USD = {rate:.2f} INR")
+        result = process_growth_report(df24, df12, str(report_path), inr_to_usd=rate)
     except Exception as e:
         fail(f"Report build failed: {e}")
 

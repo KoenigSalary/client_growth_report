@@ -48,7 +48,7 @@ class RMS2LocalSession:
     STATE_ERROR                 = "error"
 
     # How long to wait for the user to enter the OTP (seconds)
-    OTP_WAIT_TIMEOUT = 300   # 5 minutes
+    OTP_WAIT_TIMEOUT = 600          # 10 minutes
 
     def __init__(self, username: str, password: str, data_dir: str = "data"):
         self.username = username
@@ -181,35 +181,49 @@ class RMS2LocalSession:
         self._screenshot(page, "02_after_user_otp.png")
 
     def _appears_authenticated(self, page: Page) -> bool:
-        """Heuristic: not on login/OTP, has navigated to an authenticated URL."""
+        """STRICT v5.1 check: ALL conditions must hold.
+        Prevents the bug where the script raced ahead before OTP entry."""
         try:
-            url = (page.url or "").lower()
-
-            # Still on login root?
-            if url.rstrip("/") == RMS_LOGIN_URL.rstrip("/").lower():
-                # Check if there is still a visible password input
-                if self._has_visible(page, "input[type='password']"):
+            url = (page.url or "").lower().rstrip("/")
+            login_root = RMS_LOGIN_URL.lower().rstrip("/")
+            # 1. URL must NOT be login root or contain login/otp/verify/auth
+            if url == login_root:
+                return False
+            if any(token in url for token in
+                   ("login", "otp", "verify", "verification", "auth", "2fa", "mfa")):
+                return False
+            # 2. No visible password input
+            if self._has_visible(page, "input[type='password']"):
+                return False
+            # 3. No visible OTP-style input
+            for sel in [
+                "input[maxlength='6']", "input[maxlength='4']",
+                "input[type='tel']",
+                "input[placeholder*='OTP' i]",
+                "input[placeholder*='code' i]",
+                "input[placeholder*='verification' i]",
+                "input[name*='otp' i]",
+                "input[name*='code' i]",
+                "input[id*='otp' i]",
+                "input[id*='code' i]",
+            ]:
+                if self._has_visible(page, sel):
                     return False
-                # Check if there is still an OTP-style input
-                for sel in [
-                    "input[maxlength='6']", "input[maxlength='4']",
-                    "input[placeholder*='OTP' i]",
-                    "input[placeholder*='code' i]",
-                    "input[name*='otp' i]",
-                    "input[name*='code' i]",
-                ]:
-                    if self._has_visible(page, sel):
-                        return False
-                # No login/OTP inputs visible -- likely authenticated landing page
-                return True
-
-            # URL changed to something other than /login -- authenticated
-            if "login" not in url:
-                return True
-
+            # 4. Require a "logged-in hallmark" to be visible
+            for sel in [
+                "a:has-text('Logout')", "button:has-text('Logout')",
+                "text=Logout", "text=Log Out",
+                "text=Dashboard", "text=RCB",
+                "a[href*='/RCB']", "a[href*='/Dashboard']",
+                "[class*='user-menu']", "[class*='userMenu']",
+                "[class*='avatar']",
+            ]:
+                if self._has_visible(page, sel):
+                    return True
             return False
         except Exception:
             return False
+
 
     def _has_visible(self, page: Page, selector: str) -> bool:
         try:

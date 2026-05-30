@@ -148,6 +148,17 @@ with st.sidebar:
     )
 
     st.markdown("---")
+
+    st.markdown("### 💱 Exchange Rate")
+    st.session_state.inr_to_usd = st.number_input(
+        "1 USD = ? INR",
+        min_value=50.0, max_value=120.0,
+        value=float(st.session_state.get("inr_to_usd", 86.0)),
+        step=0.5,
+        help="Exchange rate used to convert INR amounts to USD in the report.",
+    )
+    st.caption(f"Current: 1 USD = ₹{st.session_state.inr_to_usd:.2f}")
+    st.markdown("---")
     if st.button("🚪 Logout"):
         st.session_state.authenticated = False
         st.rerun()

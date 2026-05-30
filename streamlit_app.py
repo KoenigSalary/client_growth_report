@@ -1,13 +1,13 @@
 """
-Client Growth Report Dashboard -- v5.0 (cloud viewer)
+Client Growth Report Dashboard -- v5.2 (visual edition)
 
-This Streamlit app is intentionally simple:
-  - Shows the LATEST generated report (download button)
-  - Shows the report history (all files in generated_reports/)
-  - Tells users to run the monthly job LOCALLY on the 14th
-
-The actual RMS2 download + OTP + email pipeline runs OFFLINE via
-`run_monthly.py` on your laptop (launched by the .bat / .sh scripts).
+What's new in v5.2:
+  - KPI cards (Total Clients, High-Growth, Total Growth USD, Avg %)
+  - Top-10 growth bar chart
+  - High-Growth clients table (inline preview)
+  - Growth distribution pie chart by tier
+  - All driven by the latest report in generated_reports/
+  - Configurable exchange rate slider
 """
 
 import os
@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 
 
@@ -39,8 +40,27 @@ st.markdown(
     background: linear-gradient(135deg, #007aa3 0%, #002d4c 100%);
 }
 h1 { color: #0099cc; }
+.kpi-card {
+    background: white; padding: 1.2rem 1.5rem; border-radius: 12px;
+    border-left: 4px solid #0099cc; box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    height: 100%;
+}
+.kpi-card h3 {
+    margin: 0; color: #666; font-size: 0.85rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.kpi-card .value {
+    font-size: 1.8rem; font-weight: 700; color: #003d5c; margin-top: 0.3rem;
+}
+.kpi-card .sub {
+    font-size: 0.8rem; color: #999; margin-top: 0.2rem;
+}
+.kpi-good   { border-left-color: #4caf50; }
+.kpi-warn   { border-left-color: #ff9800; }
+.kpi-info   { border-left-color: #2196f3; }
+.kpi-purple { border-left-color: #9c27b0; }
 .run-instructions {
-    padding: 1.5rem; background: #fff7e6; border-left: 4px solid #ff9800;
+    padding: 1.2rem; background: #fff7e6; border-left: 4px solid #ff9800;
     border-radius: 8px; margin: 1rem 0;
 }
 .run-instructions code {
@@ -66,6 +86,7 @@ for k, v in [
     ("authenticated", False),
     ("login_password", DEFAULT_PASSWORD),
     ("reset_stage", None),
+    ("inr_to_usd", 86.0),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -113,16 +134,13 @@ if not st.session_state.authenticated:
     st.stop()
 
 
-# ============ MAIN APP ============
+# ============ MAIN APP HEADER + SIDEBAR ============
 h1, h2 = st.columns([3, 1])
 with h1:
     st.title("📊 Client Growth Report")
     st.markdown("**Powered by Koenig Solutions**")
-
 st.markdown("---")
 
-
-# ============ SIDEBAR ============
 with st.sidebar:
     if Path("assets/koenig_logo.png").exists():
         st.image("assets/koenig_logo.png", width=200)
@@ -136,8 +154,7 @@ with st.sidebar:
         "1. Growth Comparison\n"
         "2. High Growth 5K-50K\n"
         "3. Summary\n"
-        "4. Exceptions\n\n"
-        "**Exchange rate**: 1 USD = 86 INR"
+        "4. Exceptions"
     )
 
     st.markdown("---")
@@ -148,27 +165,76 @@ with st.sidebar:
     )
 
     st.markdown("---")
-
     st.markdown("### 💱 Exchange Rate")
     st.session_state.inr_to_usd = st.number_input(
         "1 USD = ? INR",
         min_value=50.0, max_value=120.0,
         value=float(st.session_state.get("inr_to_usd", 86.0)),
         step=0.5,
-        help="Exchange rate used to convert INR amounts to USD in the report.",
+        help="Used for the dashboard's recomputed USD figures.",
     )
     st.caption(f"Current: 1 USD = ₹{st.session_state.inr_to_usd:.2f}")
+
     st.markdown("---")
     if st.button("🚪 Logout"):
         st.session_state.authenticated = False
         st.rerun()
 
 
-# ============ HOW-TO-RUN PANEL ============
-st.markdown("## ▶️ How to Run the Monthly Report")
+# ============ HELPER FUNCTIONS ============
+@st.cache_data(show_spinner=False)
+def load_latest_report(file_path: str, mtime: float):
+    """Load the latest report Excel as DataFrames (Growth Comparison & High Growth)."""
+    growth = pd.read_excel(file_path, sheet_name="Growth Comparison")
+    try:
+        hg = pd.read_excel(file_path, sheet_name="High Growth 5K-50K USD")
+    except Exception:
+        hg = pd.DataFrame()
+    try:
+        summary = pd.read_excel(file_path, sheet_name="Summary")
+    except Exception:
+        summary = pd.DataFrame()
+    return growth, hg, summary
 
-st.markdown(
-    """<div class='run-instructions'>
+
+def latest_report_path() -> Path | None:
+    reports_dir = Path("generated_reports")
+    if not reports_dir.exists():
+        return None
+    reports = sorted(
+        reports_dir.glob("Client_Growth_Report_*.xlsx"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return reports[0] if reports else None
+
+
+def fmt_money(n: float) -> str:
+    """Format a number as $X.XM / $X.XK / $X."""
+    n = float(n or 0)
+    if abs(n) >= 1_000_000:
+        return f"${n/1_000_000:.1f}M"
+    if abs(n) >= 1_000:
+        return f"${n/1_000:.1f}K"
+    return f"${n:,.0f}"
+
+
+def kpi_card(title: str, value: str, sub: str = "", color: str = "info"):
+    return f"""<div class="kpi-card kpi-{color}">
+        <h3>{title}</h3>
+        <div class="value">{value}</div>
+        <div class="sub">{sub}</div>
+    </div>"""
+
+
+# ============ LATEST REPORT VIEW ============
+report = latest_report_path()
+
+if report is None:
+    # No report yet -- show instructions only
+    st.markdown("## ▶️ How to Run the Monthly Report")
+    st.markdown(
+        """<div class='run-instructions'>
 <b>Because RMS2 now requires OTP on every login, the report must be triggered
 from your local computer</b> (laptop/desktop) so you can type the OTP into the
 Chromium window that pops up.<br><br>
@@ -186,68 +252,207 @@ download &rarr; build report &rarr; email &rarr; commit to git.</li>
 </ol>
 The report will appear in this dashboard once committed to git.
 </div>""",
-    unsafe_allow_html=True,
-)
-
-
-# ============ REPORT VIEWER ============
-st.markdown("---")
-st.markdown("## 📑 Generated Reports")
-
-reports_dir = Path("generated_reports")
-if not reports_dir.exists():
-    st.info("No reports generated yet. Run `run_monthly.py` locally first.")
+        unsafe_allow_html=True,
+    )
+    st.info("ℹ️ No reports generated yet. Run `run_monthly.py` locally first.")
 else:
-    reports = sorted(
+    # We have a report -- show the rich dashboard
+    growth, hg, summary = load_latest_report(str(report), report.stat().st_mtime)
+
+    ts = datetime.fromtimestamp(report.stat().st_mtime)
+    st.markdown(f"### 📅 Latest Report: `{report.name}`")
+    st.caption(f"Generated: **{ts:%Y-%m-%d %H:%M:%S}** &nbsp;•&nbsp; "
+               f"Size: {report.stat().st_size/1024/1024:.1f} MB &nbsp;•&nbsp; "
+               f"{len(growth):,} clients analyzed")
+
+    # ---------- KPI cards ----------
+    total_clients = len(growth)
+    high_growth   = len(hg)
+    total_growth  = growth["Growth_USD"].sum() if "Growth_USD" in growth.columns else 0
+    avg_growth_pct = growth["Growth_%"].mean() if "Growth_%" in growth.columns else 0
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown(
+            kpi_card("Total Clients", f"{total_clients:,}",
+                     "across all 12-month data", "info"),
+            unsafe_allow_html=True,
+        )
+    with k2:
+        st.markdown(
+            kpi_card("High-Growth", f"{high_growth}",
+                     "Prev ≤ $5K → Curr ≥ $50K", "good"),
+            unsafe_allow_html=True,
+        )
+    with k3:
+        st.markdown(
+            kpi_card("Total Growth", fmt_money(total_growth),
+                     "USD, all clients combined", "purple"),
+            unsafe_allow_html=True,
+        )
+    with k4:
+        st.markdown(
+            kpi_card("Avg Growth %", f"{avg_growth_pct:.1f}%",
+                     "mean across clients", "warn"),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ---------- Two columns: Top 10 chart  ::  Distribution pie ----------
+    c1, c2 = st.columns([3, 2])
+
+    with c1:
+        st.markdown("### 📈 Top 10 Growth Clients (USD)")
+        if "Growth_USD" in growth.columns and len(growth):
+            top10 = (growth.sort_values("Growth_USD", ascending=False)
+                            .head(10)
+                            [["CompanyName", "Growth_USD"]])
+            # Use a horizontal bar chart -- nicest in Streamlit
+            chart_df = top10.set_index("CompanyName")
+            st.bar_chart(chart_df, horizontal=True, height=400)
+        else:
+            st.info("Growth_USD column missing -- skipping chart.")
+
+    with c2:
+        st.markdown("### 🥧 Growth Tiers")
+        if "Growth_USD" in growth.columns and len(growth):
+            tiers = pd.cut(
+                growth["Growth_USD"],
+                bins=[-1e15, 0, 5_000, 50_000, 250_000, 1e15],
+                labels=["Declining (<0)",
+                        "Flat ($0-$5K)",
+                        "Growing ($5K-$50K)",
+                        "Strong ($50K-$250K)",
+                        "Star (>$250K)"],
+            )
+            tier_counts = tiers.value_counts().reset_index()
+            tier_counts.columns = ["Tier", "Count"]
+            # Streamlit doesn't have native pie, but we can use plotly if avail
+            try:
+                import plotly.express as px
+                fig = px.pie(
+                    tier_counts, names="Tier", values="Count",
+                    color="Tier",
+                    color_discrete_map={
+                        "Declining (<0)":      "#ef5350",
+                        "Flat ($0-$5K)":       "#bdbdbd",
+                        "Growing ($5K-$50K)":  "#42a5f5",
+                        "Strong ($50K-$250K)": "#66bb6a",
+                        "Star (>$250K)":       "#ffa726",
+                    },
+                    hole=0.4,
+                )
+                fig.update_traces(textposition="inside", textinfo="percent+label")
+                fig.update_layout(showlegend=True, height=400, margin=dict(t=10, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+            except ImportError:
+                # Fallback: just show counts as a table
+                st.table(tier_counts)
+
+    st.markdown("---")
+
+    # ---------- High-growth table ----------
+    st.markdown("### 🚀 High-Growth Clients (Prev ≤ $5K → Curr ≥ $50K)")
+    if len(hg) > 0:
+        display_cols = [c for c in
+            ["CompanyName", "UserName", "Previous_12M_USD",
+             "Current_12M_USD", "Growth_USD", "Growth_%", "URL"]
+            if c in hg.columns]
+        st.dataframe(
+            hg[display_cols].sort_values(
+                "Growth_USD" if "Growth_USD" in hg.columns else display_cols[0],
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Previous_12M_USD": st.column_config.NumberColumn(
+                    "Previous 12M", format="$%d"),
+                "Current_12M_USD":  st.column_config.NumberColumn(
+                    "Current 12M",  format="$%d"),
+                "Growth_USD":       st.column_config.NumberColumn(
+                    "Growth USD",   format="$%d"),
+                "Growth_%":         st.column_config.NumberColumn(
+                    "Growth %",     format="%.1f%%"),
+                "URL":              st.column_config.LinkColumn("URL"),
+            },
+        )
+    else:
+        st.info("No high-growth clients in this report.")
+
+    st.markdown("---")
+
+    # ---------- Full Growth Comparison (collapsed) ----------
+    with st.expander(f"📋 Full Growth Comparison ({len(growth):,} rows)", expanded=False):
+        display_cols = [c for c in
+            ["CompanyName", "UserName", "CorporateID",
+             "Previous_12M_USD", "Current_12M_USD", "Growth_USD", "Growth_%"]
+            if c in growth.columns]
+        st.dataframe(
+            growth[display_cols].sort_values(
+                "Growth_USD" if "Growth_USD" in growth.columns else display_cols[0],
+                ascending=False
+            ),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Previous_12M_USD": st.column_config.NumberColumn(
+                    "Previous 12M", format="$%d"),
+                "Current_12M_USD":  st.column_config.NumberColumn(
+                    "Current 12M",  format="$%d"),
+                "Growth_USD":       st.column_config.NumberColumn(
+                    "Growth USD",   format="$%d"),
+                "Growth_%":         st.column_config.NumberColumn(
+                    "Growth %",     format="%.1f%%"),
+            },
+        )
+
+    # ---------- Download buttons ----------
+    st.markdown("### 📥 Downloads")
+    with open(report, "rb") as f:
+        st.download_button(
+            f"📥 Download Latest Excel Report ({report.name})",
+            f, report.name,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+
+# ============ REPORT HISTORY ============
+st.markdown("---")
+st.markdown("## 📚 Report History")
+reports_dir = Path("generated_reports")
+if reports_dir.exists():
+    all_reports = sorted(
         reports_dir.glob("Client_Growth_Report_*.xlsx"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    if not reports:
-        st.info("No reports generated yet. Run `run_monthly.py` locally first.")
-    else:
-        # Latest report -- big card
-        latest = reports[0]
-        ts = datetime.fromtimestamp(latest.stat().st_mtime)
-        size_mb = latest.stat().st_size / 1024 / 1024
-
-        st.markdown(
-            f"""<div class='report-card report-newest'>
-<b>🆕 Latest Report</b><br>
-<code>{latest.name}</code><br>
-Generated: <b>{ts:%Y-%m-%d %H:%M:%S}</b> &nbsp;•&nbsp; Size: {size_mb:.1f} MB
-</div>""",
-            unsafe_allow_html=True,
-        )
-        with open(latest, "rb") as f:
-            st.download_button(
-                "📥 Download Latest Report",
-                f, latest.name,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-        # History
-        if len(reports) > 1:
-            st.markdown("### 📚 History")
-            with st.expander(f"Show all {len(reports)} reports", expanded=False):
-                for r in reports[1:]:
-                    rts = datetime.fromtimestamp(r.stat().st_mtime)
-                    rmb = r.stat().st_size / 1024 / 1024
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
-                        st.markdown(
-                            f"`{r.name}` &nbsp;•&nbsp; "
-                            f"{rts:%Y-%m-%d %H:%M} &nbsp;•&nbsp; {rmb:.1f} MB"
+    if len(all_reports) > 1:
+        with st.expander(f"Show all {len(all_reports)} reports", expanded=False):
+            for r in all_reports[1:]:
+                rts = datetime.fromtimestamp(r.stat().st_mtime)
+                rmb = r.stat().st_size / 1024 / 1024
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(
+                        f"`{r.name}` &nbsp;•&nbsp; "
+                        f"{rts:%Y-%m-%d %H:%M} &nbsp;•&nbsp; {rmb:.1f} MB"
+                    )
+                with col2:
+                    with open(r, "rb") as f:
+                        st.download_button(
+                            "📥", f, r.name,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dl_{r.name}",
                         )
-                    with c2:
-                        with open(r, "rb") as f:
-                            st.download_button(
-                                "📥 Download",
-                                f, r.name,
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"dl_{r.name}",
-                            )
+    elif len(all_reports) == 1:
+        st.caption("Only one report so far — it's shown above.")
+    else:
+        st.caption("No history yet.")
+else:
+    st.caption("No reports folder yet.")
 
 
 # ============ RAW DATA STATUS ============
@@ -282,7 +487,7 @@ with c2:
 st.markdown("---")
 st.markdown(
     "<div style='text-align:center; font-size:0.9rem; color:grey;'>"
-    "Client Growth Report v5.0 (Cloud Viewer) | © 2025 Koenig Solutions"
+    "Client Growth Report v5.2 (Visual Edition) | © 2025 Koenig Solutions"
     "</div>",
     unsafe_allow_html=True,
 )

@@ -48,7 +48,8 @@ class RMS2LocalSession:
     STATE_ERROR                 = "error"
 
     # How long to wait for the user to enter the OTP (seconds)
-    OTP_WAIT_TIMEOUT = 600          # 10 minutes
+    OTP_WAIT_TIMEOUT = 600   # 10 minutes
+    OTP_INITIAL_GRACE = 8    # extra wait for OTP page to render   # 10 minutes
 
     def __init__(self, username: str, password: str, data_dir: str = "data"):
         self.username = username
@@ -136,7 +137,7 @@ class RMS2LocalSession:
 
         # Wait for navigation away from the password field
         page.wait_for_load_state("networkidle", timeout=60000)
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(self.OTP_INITIAL_GRACE * 1000)
 
         # Now we are either on the RCB dashboard already OR on the OTP screen.
         # If the OTP screen is up, wait for the USER to type the OTP into the
@@ -181,21 +182,17 @@ class RMS2LocalSession:
         self._screenshot(page, "02_after_user_otp.png")
 
     def _appears_authenticated(self, page: Page) -> bool:
-        """STRICT v5.1 check: ALL conditions must hold.
-        Prevents the bug where the script raced ahead before OTP entry."""
+        """STRICT v5.2 check: ALL conditions must hold."""
         try:
             url = (page.url or "").lower().rstrip("/")
             login_root = RMS_LOGIN_URL.lower().rstrip("/")
-            # 1. URL must NOT be login root or contain login/otp/verify/auth
             if url == login_root:
                 return False
             if any(token in url for token in
                    ("login", "otp", "verify", "verification", "auth", "2fa", "mfa")):
                 return False
-            # 2. No visible password input
             if self._has_visible(page, "input[type='password']"):
                 return False
-            # 3. No visible OTP-style input
             for sel in [
                 "input[maxlength='6']", "input[maxlength='4']",
                 "input[type='tel']",
@@ -209,7 +206,6 @@ class RMS2LocalSession:
             ]:
                 if self._has_visible(page, sel):
                     return False
-            # 4. Require a "logged-in hallmark" to be visible
             for sel in [
                 "a:has-text('Logout')", "button:has-text('Logout')",
                 "text=Logout", "text=Log Out",

@@ -105,7 +105,7 @@ def process_growth_report(df_24m, df_12m, output_file, inr_to_usd: float = 86.0)
             lambda r: r['URL_curr']
             if pd.notna(r['URL_curr']) and str(r['URL_curr']).strip() != ''
             else (
-                f"https://rms2.koenig-solutions.com/corporate/{str(r['CorporateID'])}"
+                f"https://rms2.koenig-solutions.com/corporate/{r['CorporateID']}"
                 if pd.notna(r['CorporateID']) else ''
             ),
             axis=1

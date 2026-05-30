@@ -1,0 +1,16 @@
+#!/bin/bash
+# This is the inner executable of the Client Growth Report.app bundle.
+# It launches Terminal so the user can see progress, then runs the monthly job.
+
+# Find the repo root: this script lives at:
+#   .../client_growth_report/launchers/Client Growth Report.app/Contents/MacOS/launcher
+# So repo root = 4 levels up
+REPO_DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
+
+# Open Terminal and run the monthly script in the repo dir
+osascript << APPLE
+tell application "Terminal"
+    activate
+    do script "cd \"${REPO_DIR}\" && ./launchers/run_local_mac_linux.sh"
+end tell
+APPLE

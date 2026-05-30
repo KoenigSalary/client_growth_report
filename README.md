@@ -1,7 +1,14 @@
-# Client Growth Report — v5.0
+# Client Growth Report — v5.3
 
 Automated monthly growth analysis for Koenig Solutions clients,
-with RMS2 OTP support.
+with RMS2 OTP support. Designed for **two operators** (maker + one colleague)
+to run from their own laptops, sharing a single read-only dashboard for viewing.
+
+## 🚀 Quick start
+
+- **New user / colleague?** Follow [`COLLEAGUE_SETUP.md`](COLLEAGUE_SETUP.md) — one-page guide, ~15 min.
+- **Already set up?** See [`HOW_TO_RUN.md`](HOW_TO_RUN.md) for the 3 ways to launch.
+- **Maintainer / developer?** Read on.
 
 ## 🗺️ Architecture
 

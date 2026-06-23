@@ -203,68 +203,60 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ▶ Run Report")
 
-    if IS_LOCAL:
-        st.caption(f"Detected: **local** ({platform.system()}) — manual run available")
-        run_clicked = st.button(
-            "▶ Run Now",
-            use_container_width=True,
-            help="Launches run_monthly.py in a new window. RMS2 OTP prompt will appear in Terminal.",
-        )
-        if run_clicked:
-            try:
-                proj_root = Path(__file__).resolve().parent
-                system = platform.system()
+    # Always show the Run Now button — works on any OS whether local or not.
+    # Opens a Terminal/Command Prompt window so the user can enter the RMS2 OTP.
+    run_clicked = st.button(
+        "▶ Run Now",
+        use_container_width=True,
+        help="Opens a Terminal window and launches run_monthly.py. Enter the RMS2 OTP when prompted.",
+        type="primary",
+    )
+    if run_clicked:
+        try:
+            proj_root = Path(__file__).resolve().parent
+            system = platform.system()
 
-                if system == "Darwin":
-                    # macOS: open a new Terminal window running the launcher script
-                    sh = proj_root / "launchers" / "run_local_mac_linux.sh"
-                    if sh.exists():
-                        subprocess.Popen([
-                            "osascript", "-e",
-                            f'tell application "Terminal" to do script "bash {sh}"'
-                        ])
-                        st.success("✅ Launched in a new Terminal window. Watch that window for the RMS2 OTP prompt.")
-                    else:
-                        # Fallback: run in background, no terminal
-                        subprocess.Popen(
-                            [sys.executable, str(proj_root / "run_monthly.py")],
-                            cwd=str(proj_root),
-                        )
-                        st.success("✅ Started in background. Check your inbox for the OTP and look at the Streamlit console.")
-
-                elif system == "Windows":
-                    bat = proj_root / "launchers" / "run_local_windows.bat"
-                    if bat.exists():
-                        subprocess.Popen(
-                            ["cmd.exe", "/c", "start", "", str(bat)],
-                            cwd=str(proj_root),
-                            shell=False,
-                        )
-                        st.success("✅ Launched in a new Command Prompt window. Watch that window for the OTP prompt.")
-                    else:
-                        subprocess.Popen(
-                            [sys.executable, str(proj_root / "run_monthly.py")],
-                            cwd=str(proj_root),
-                        )
-                        st.success("✅ Started in background.")
+            if system == "Darwin":
+                sh = proj_root / "launchers" / "run_local_mac_linux.sh"
+                if sh.exists():
+                    subprocess.Popen([
+                        "osascript", "-e",
+                        f'tell application "Terminal" to do script "bash \\"{sh}\\""'
+                    ])
+                    st.success("✅ Launched in a new Terminal window. Enter the RMS2 OTP when it appears.")
                 else:
-                    # Linux
                     subprocess.Popen(
                         [sys.executable, str(proj_root / "run_monthly.py")],
                         cwd=str(proj_root),
                     )
-                    st.success("✅ Started. Check the Streamlit console for the OTP prompt.")
-            except Exception as e:
-                st.error(f"Could not start the run: {e}")
+                    st.success("✅ Started in background. Switch to Terminal to enter the OTP.")
 
-        st.caption("💡 Tip: After clicking, switch to the Terminal/Command-Prompt window to enter the RMS2 OTP from your Outlook inbox.")
-    else:
-        st.info(
-            "🌐 **Cloud mode (view-only)**\n\n"
-            "To generate a fresh report, run the **Client Growth Report** app on your laptop "
-            "(or `python run_monthly.py`).\n\n"
-            "This dashboard auto-refreshes once the new file is committed to GitHub."
-        )
+            elif system == "Windows":
+                bat = proj_root / "launchers" / "run_local_windows.bat"
+                if bat.exists():
+                    subprocess.Popen(
+                        ["cmd.exe", "/c", "start", "Client Growth Report", str(bat)],
+                        cwd=str(proj_root),
+                        shell=False,
+                    )
+                    st.success("✅ Launched in a new Command Prompt window. Enter the RMS2 OTP when it appears.")
+                else:
+                    subprocess.Popen(
+                        [sys.executable, str(proj_root / "run_monthly.py")],
+                        cwd=str(proj_root),
+                    )
+                    st.success("✅ Started in background. Watch the console for the OTP prompt.")
+            else:
+                # Linux
+                subprocess.Popen(
+                    [sys.executable, str(proj_root / "run_monthly.py")],
+                    cwd=str(proj_root),
+                )
+                st.success("✅ Started. Check the Streamlit console for the OTP prompt.")
+        except Exception as e:
+            st.error(f"Could not start the run: {e}")
+
+    st.caption("💡 After clicking, switch to the Terminal / Command Prompt and enter the RMS2 OTP from your Outlook inbox.")
 
     st.markdown("---")
     st.markdown("### 🗓️ Schedule")
